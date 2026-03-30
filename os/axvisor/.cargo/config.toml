@@ -6,7 +6,6 @@ git-fetch-with-cli = true
 rustflags = [
     "-Clink-args=-no-pie",
     "-Clink-args=-znostart-stop-gc",
-    "-Clink-args=-Tlink.x",
 ]
 
 # Comment out because it's specified by runner in tgoskits
@@ -22,7 +21,6 @@ rustflags = [
 rustflags = [
     "-Clink-args=-no-pie",
     "-Clink-args=-znostart-stop-gc",
-    "-Clink-args=-Tlink.x",
 ]
 
 [target.'cfg(target_os = "none")']

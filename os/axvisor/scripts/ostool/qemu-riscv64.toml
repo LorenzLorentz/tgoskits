@@ -7,7 +7,7 @@ args = [
   "-bios",
   "default",
   "-smp",
-  "4",
+  "1",
   "-device",
   "virtio-blk-device,drive=disk0",
   "-drive",

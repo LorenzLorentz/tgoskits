@@ -94,7 +94,7 @@ fn default_runtime_qemu_args(arch: &str, rootfs_path: Option<&Path>) -> Vec<Stri
             "-bios".to_string(),
             "default".to_string(),
             "-smp".to_string(),
-            "4".to_string(),
+            "1".to_string(),
             "-device".to_string(),
             "virtio-blk-device,drive=disk0".to_string(),
             "-drive".to_string(),

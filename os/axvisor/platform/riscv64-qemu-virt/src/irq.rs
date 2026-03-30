@@ -224,8 +224,9 @@ impl IrqIf for IrqIfImpl {
 
                 // trace!("IRQ: external {irq}");
                 // IRQ_HANDLER_TABLE.handle(irq.get() as usize);
-                // Only for irqs that belong to axvisor, complete the IRQ.
-                // plic.complete(this_context(), irq);
+                // The guest will complete the forwarded IRQ through the virtual PLIC
+                // claim/complete path, which mirrors the aarch64 "guest owns ack"
+                // strategy and keeps the passthrough device state coherent.
                 Some(irq.get() as usize)
             },
             @EX_IRQ => {

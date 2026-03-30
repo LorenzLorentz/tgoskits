@@ -42,6 +42,7 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use anyhow::Context;
@@ -119,6 +120,46 @@ struct MemoryImage {
     pub ramdisk: Option<PathBuf>,
 }
 
+fn compile_dts_if_needed(path: PathBuf, image_id: usize) -> anyhow::Result<PathBuf> {
+    if path.extension().and_then(|ext| ext.to_str()) != Some("dts") {
+        return Ok(path);
+    }
+
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap()).join("dtbs");
+    fs::create_dir_all(&out_dir)?;
+
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("guest");
+    let output = out_dir.join(format!("{stem}-{image_id}.dtb"));
+
+    let status = Command::new("dtc")
+        .arg("-I")
+        .arg("dts")
+        .arg("-O")
+        .arg("dtb")
+        .arg("-o")
+        .arg(&output)
+        .arg(&path)
+        .status()
+        .with_context(|| {
+            format!(
+                "failed to invoke dtc while compiling guest DTB source {}",
+                path.display()
+            )
+        })?;
+
+    if !status.success() {
+        anyhow::bail!(
+            "dtc failed while compiling guest DTB source {}",
+            path.display()
+        );
+    }
+
+    Ok(output)
+}
+
 fn parse_config_file(config_file: &ConfigFile) -> Option<MemoryImage> {
     let config = config_file
         .content
@@ -188,7 +229,12 @@ fn generate_guest_img_loading_functions(
                 .to_string();
             let dtb = match files.dtb {
                 Some(v) => {
-                    let s = v.canonicalize().unwrap().display().to_string();
+                    let source = v
+                        .canonicalize()
+                        .with_context(|| format!("Path {} not found", v.display()))?;
+                    println!("cargo:rerun-if-changed={}", source.display());
+                    let compiled = compile_dts_if_needed(source, id)?;
+                    let s = compiled.canonicalize()?.display().to_string();
                     quote! { Some(include_bytes!(#s)) }
                 }
                 None => quote! { None },

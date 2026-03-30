@@ -17,7 +17,15 @@ fn main() {
 
     // target/<target_triple>/<mode>/build/axvisor-xxxx/out
     let out_dir = std::env::var("OUT_DIR").unwrap();
-    let out_path = std::path::Path::new(&out_dir).join("link.x");
-    println!("cargo:rustc-link-search={out_dir}");
-    std::fs::write(out_path, ld_content).unwrap();
+    let out_dir = std::path::Path::new(&out_dir);
+    let linker_name = "linker.x";
+    let out_path = out_dir.join(linker_name);
+    println!("cargo:rustc-link-search={}", out_dir.display());
+    println!("cargo:rustc-link-arg=-T{linker_name}");
+    std::fs::write(&out_path, &ld_content).unwrap();
+
+    // Keep a stable copy under target/<target_triple>/<mode>/ for callers that
+    // still expect the linker script outside the build-script OUT_DIR.
+    let target_dir = out_dir.join("../../..");
+    std::fs::write(target_dir.join(linker_name), ld_content).unwrap();
 }

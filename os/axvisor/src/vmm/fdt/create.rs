@@ -24,7 +24,7 @@ use axvm::{VMMemoryRegion, config::AxVMCrateConfig};
 use fdt_parser::{Fdt, Node};
 use memory_addr::MemoryAddr;
 
-use crate::vmm::{VMRef, images::load_vm_image_from_memory};
+use crate::vmm::{VMRef, config::config, images::load_vm_image_from_memory};
 
 // use crate::vmm::fdt::print::{print_fdt, print_guest_fdt};
 
@@ -105,21 +105,65 @@ pub fn crate_guest_fdt(
 
         previous_node_level = node.level;
 
-        // Copy all properties of the node
-        for prop in node.propertys() {
-            if node_path.starts_with("/cpus") && should_skip_guest_cpu_prop(prop.name) {
-                continue;
+        if node.name() == "chosen" {
+            let mut has_bootargs = false;
+            let mut has_stdout_path = false;
+            for prop in node.propertys() {
+                if node_path.starts_with("/cpus") && should_skip_guest_cpu_prop(prop.name) {
+                    continue;
+                }
+                match prop.name {
+                    "bootargs" => {
+                        has_bootargs = true;
+                        fdt_writer.property(prop.name, prop.raw_value()).unwrap();
+                    }
+                    "stdout-path" => {
+                        has_stdout_path = true;
+                        fdt_writer.property(prop.name, prop.raw_value()).unwrap();
+                    }
+                    _ => fdt_writer.property(prop.name, prop.raw_value()).unwrap(),
+                }
             }
-            fdt_writer.property(prop.name, prop.raw_value()).unwrap();
+            if !has_bootargs {
+                fdt_writer
+                    .property_string("bootargs", "root=/dev/vda rw init=/init")
+                    .unwrap();
+            }
+            if !has_stdout_path {
+                fdt_writer
+                    .property_string("stdout-path", "serial0:115200n8")
+                    .unwrap();
+            }
+        } else {
+            // Copy all properties of the node
+            for prop in node.propertys() {
+                if node_path.starts_with("/cpus") && should_skip_guest_cpu_prop(prop.name) {
+                    continue;
+                }
+                fdt_writer.property(prop.name, prop.raw_value()).unwrap();
+            }
         }
     }
 
-    // End all unclosed nodes
-    while let Some(node) = node_stack.pop() {
+    // End remaining nested nodes while keeping the root open so we can inject
+    // guest memory information even when the source DTB did not expose a usable
+    // memory node for the guest.
+    while node_stack.len() > 1 {
         previous_node_level -= 1;
+        let node = node_stack.pop().unwrap();
         fdt_writer.end_node(node).unwrap();
     }
-    assert_eq!(previous_node_level, 0);
+
+    if !crate_config.kernel.memory_regions.is_empty() {
+        let memory_node = fdt_writer.begin_node("memory").unwrap();
+        add_memory_node_from_config(crate_config, &mut fdt_writer);
+        fdt_writer.end_node(memory_node).unwrap();
+    }
+
+    while let Some(node) = node_stack.pop() {
+        previous_node_level = previous_node_level.saturating_sub(1);
+        fdt_writer.end_node(node).unwrap();
+    }
 
     fdt_writer.finish().unwrap()
 }
@@ -149,6 +193,8 @@ fn determine_node_action(
     if node.name() == "/" {
         // Special handling for root node
         NodeAction::RootNode
+    } else if node_path == "/reserved-memory" || node_path.starts_with("/reserved-memory/") {
+        NodeAction::Skip
     } else if node.name().starts_with("memory") {
         // Skip memory nodes, will add them later
         NodeAction::Skip
@@ -285,6 +331,23 @@ fn add_memory_node(new_memory: &[VMMemoryRegion], new_fdt: &mut FdtWriter) {
     new_fdt.property_string("device_type", "memory").unwrap();
 }
 
+fn add_memory_node_from_config(crate_config: &AxVMCrateConfig, new_fdt: &mut FdtWriter) {
+    let mut new_value: Vec<u32> = Vec::new();
+    for mem in &crate_config.kernel.memory_regions {
+        let gpa = mem.gpa as u64;
+        let size = mem.size as u64;
+        new_value.push((gpa >> 32) as u32);
+        new_value.push((gpa & 0xFFFF_FFFF) as u32);
+        new_value.push((size >> 32) as u32);
+        new_value.push((size & 0xFFFF_FFFF) as u32);
+    }
+    info!("Adding config memory node with value: 0x{new_value:x?}");
+    new_fdt
+        .property_array_u32("reg", new_value.as_ref())
+        .unwrap();
+    new_fdt.property_string("device_type", "memory").unwrap();
+}
+
 pub fn update_fdt(fdt_src: NonNull<u8>, dtb_size: usize, vm: VMRef) {
     let mut new_fdt = FdtWriter::new().unwrap();
     let mut previous_node_level = 0;
@@ -294,6 +357,13 @@ pub fn update_fdt(fdt_src: NonNull<u8>, dtb_size: usize, vm: VMRef) {
     let fdt = Fdt::from_bytes(fdt_bytes)
         .map_err(|e| format!("Failed to parse FDT: {e:#?}"))
         .expect("Failed to parse FDT");
+
+    let ramdisk = vm.with_config(|config| {
+        config
+            .image_config
+            .ramdisk_load_gpa
+            .map(|addr| (addr, ramdisk_size(vm.id())))
+    });
 
     for node in fdt.all_nodes() {
         if node.name() == "/" {
@@ -345,6 +415,23 @@ pub fn update_fdt(fdt_src: NonNull<u8>, dtb_size: usize, vm: VMRef) {
                     new_fdt.property(prop.name, prop.raw_value()).unwrap();
                 }
             }
+
+            if let Some((ramdisk_addr, Some(ramdisk_size))) = ramdisk {
+                let start = ramdisk_addr.as_usize() as u64;
+                let end = start + ramdisk_size as u64;
+                new_fdt
+                    .property_array_u32(
+                        "linux,initrd-start",
+                        &[(start >> 32) as u32, (start & 0xffff_ffff) as u32],
+                    )
+                    .unwrap();
+                new_fdt
+                    .property_array_u32(
+                        "linux,initrd-end",
+                        &[(end >> 32) as u32, (end & 0xffff_ffff) as u32],
+                    )
+                    .unwrap();
+            }
         } else {
             for prop in node.propertys() {
                 new_fdt.property(prop.name, prop.raw_value()).unwrap();
@@ -384,6 +471,13 @@ pub fn update_fdt(fdt_src: NonNull<u8>, dtb_size: usize, vm: VMRef) {
     // Load the updated FDT into VM
     load_vm_image_from_memory(&new_fdt_bytes, dest_addr, vm_clone)
         .expect("Failed to load VM images");
+}
+
+fn ramdisk_size(vm_id: usize) -> Option<usize> {
+    config::get_memory_images()
+        .iter()
+        .find(|image| image.id == vm_id)
+        .and_then(|image| image.ramdisk.map(|bytes| bytes.len()))
 }
 
 fn calculate_dtb_load_addr(vm: VMRef, fdt_size: usize) -> GuestPhysAddr {

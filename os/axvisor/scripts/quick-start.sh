@@ -68,7 +68,7 @@ AxVisor Environment Setup and Launch Script
 
 Platforms:
     qemu-aarch64       QEMU AArch64 (ArceOS/Linux)
-    qemu-riscv64       QEMU RISC-V64 (ArceOS)
+    qemu-riscv64       QEMU RISC-V64 (ArceOS/Linux)
     qemu-x86_64        QEMU x86_64 (NimbOS)
     phytiumpi          Phytium Pi Board (ArceOS/Linux)
     roc-rk3568-pc      ROC-RK3568-PC Board (ArceOS/Linux)
@@ -90,6 +90,7 @@ Launch Options (for run/start commands):
         -m, --multi         Launch multiple guests (ArceOS+Linux)
     QEMU RISC-V64:
         -a, --arceos        Launch single ArceOS guest (default)
+        -l, --linux         Launch single Linux guest
     QEMU x86_64:
         -n, --nimbos        Launch single NimbOS guest (default)
     Phytium Pi:
@@ -110,6 +111,7 @@ Examples:
 
     # QEMU RISC-V64
     $0 qemu-riscv64 start --arceos                  # One-step: prepare + launch ArceOS
+    $0 qemu-riscv64 start --linux                   # One-step: prepare + launch Linux
 
     # QEMU x86_64
     $0 qemu-x86_64 start --nimbos                   # One-step: prepare + launch NimbOS
@@ -219,18 +221,28 @@ setup_qemu_riscv64() {
     info "Downloading ArceOS image..."
     run_cmd cargo axvisor image pull qemu_riscv64_arceos --output-dir tmp/images
 
+    info "Downloading Linux image..."
+    run_cmd cargo axvisor image pull qemu_riscv64_linux --output-dir tmp/images
+
     info "Preparing board config file..."
     run_cmd cp configs/board/qemu-riscv64.toml tmp/configs/
 
-    info "Preparing guest config file..."
+    info "Preparing guest config files..."
     run_cmd cp configs/vms/arceos-riscv64-qemu-smp1.toml tmp/configs/
+    run_cmd cp configs/vms/linux-riscv64-qemu-smp1.toml tmp/configs/
 
     run_cmd sed -i 's|^kernel_path = .*|kernel_path = "../images/qemu_riscv64_arceos/qemu-riscv64"|g' tmp/configs/arceos-riscv64-qemu-smp1.toml
     run_cmd sed -i 's|^image_location = "fs"|image_location = "memory"|g' tmp/configs/arceos-riscv64-qemu-smp1.toml
+    run_cmd sed -i 's|^kernel_path = .*|kernel_path = "../images/qemu_riscv64_linux/qemu-riscv64"|g' tmp/configs/linux-riscv64-qemu-smp1.toml
+    run_cmd sed -i 's|^image_location = "fs"|image_location = "memory"|g' tmp/configs/linux-riscv64-qemu-smp1.toml
+    run_cmd sed -i 's|^dtb_path = .*|dtb_path = "'"$(pwd)/configs/vms/linux-riscv64-qemu-smp1.dts"'"|g' tmp/configs/linux-riscv64-qemu-smp1.toml
 
     info "Preparing QEMU config file..."
     run_cmd cp .github/workflows/qemu-riscv64.toml tmp/configs/qemu-riscv64-runtime.toml
-    run_cmd cp tmp/images/qemu_riscv64_arceos/rootfs.img tmp/rootfs.img
+
+    ROOTFS_PATH="$(pwd)/tmp/images/qemu_riscv64_linux/rootfs.img"
+    run_cmd sed -i 's|file=${workspaceFolder}/tmp/rootfs.img|file='"$ROOTFS_PATH"'|g' tmp/configs/qemu-riscv64-runtime.toml
+    run_cmd sed -i '/success_regex = \[/,/\]/c\success_regex = []' tmp/configs/qemu-riscv64-runtime.toml
 
     info "=== QEMU RISC-V64 Preparation Complete ==="
 }
@@ -241,6 +253,14 @@ run_qemu_riscv64_arceos() {
         --build-config tmp/configs/qemu-riscv64.toml \
         --qemu-config tmp/configs/qemu-riscv64-runtime.toml \
         --vmconfigs tmp/configs/arceos-riscv64-qemu-smp1.toml
+}
+
+run_qemu_riscv64_linux() {
+    info "=== Launching QEMU RISC-V64 Linux Guest ==="
+    run_axvisor_qemu \
+        --build-config tmp/configs/qemu-riscv64.toml \
+        --qemu-config tmp/configs/qemu-riscv64-runtime.toml \
+        --vmconfigs tmp/configs/linux-riscv64-qemu-smp1.toml
 }
 
 # ============================================================================
@@ -596,27 +616,22 @@ cmd_run_qemu_riscv64() {
             run_qemu_riscv64_arceos
             ;;
         -l|--linux)
-            error "Unsupported combination: QEMU RISC-V64 quick start does not support Linux yet"
-            echo ""
-            echo "QEMU RISC-V64 platform currently supports the following guest system:"
-            echo "  - ArceOS (use --arceos)"
-            echo ""
-            echo "Cross-ISA guest boot (for example: riscv64 AxVisor -> aarch64 guest) is not"
-            echo "available in the current AxVisor hypervisor stack."
-            exit 1
+            run_qemu_riscv64_linux
             ;;
         -m|--multi)
             error "Unsupported combination: QEMU RISC-V64 does not support multi-guest mode"
             echo ""
-            echo "QEMU RISC-V64 platform currently supports the following guest system:"
+            echo "QEMU RISC-V64 platform currently supports the following guest systems:"
             echo "  - ArceOS (use --arceos)"
+            echo "  - Linux  (use --linux)"
             exit 1
             ;;
         -n|--nimbos)
             error "Unsupported combination: QEMU RISC-V64 does not support NimbOS"
             echo ""
-            echo "QEMU RISC-V64 platform currently supports the following guest system:"
+            echo "QEMU RISC-V64 platform currently supports the following guest systems:"
             echo "  - ArceOS (use --arceos)"
+            echo "  - Linux  (use --linux)"
             exit 1
             ;;
         *)
@@ -624,6 +639,7 @@ cmd_run_qemu_riscv64() {
             echo ""
             echo "QEMU RISC-V64 platform supports the following options:"
             echo "  -a, --arceos    Launch ArceOS guest"
+            echo "  -l, --linux     Launch Linux guest"
             exit 1
             ;;
     esac
@@ -632,7 +648,7 @@ cmd_run_qemu_riscv64() {
 cmd_start_qemu_riscv64() {
     local mode="$1"
     case "$mode" in
-        -a|--arceos|"")
+        -a|--arceos|-l|--linux|"")
             ;;
         *)
             cmd_run_qemu_riscv64 "$mode"

@@ -14,7 +14,7 @@ This guide covers how to set up the AxVisor development environment locally and 
 ```bash
 sudo apt update && sudo apt install -y \
   build-essential gcc libssl-dev libudev-dev pkg-config \
-  qemu-system-x86 qemu-system-arm qemu-system-misc \
+  qemu-system-x86 qemu-system-arm qemu-system-misc device-tree-compiler \
   git curl wget
 ```
 
@@ -39,7 +39,7 @@ cargo +stable install ostool --version '^0.8'
 
 ## 3. KVM Setup (NimbOS x86_64 Only)
 
-NimbOS runs on x86_64 QEMU and requires KVM hardware acceleration. ArceOS and Linux use AArch64 QEMU (TCG mode) and do not need KVM — you can skip this section.
+NimbOS runs on x86_64 QEMU and requires KVM hardware acceleration. ArceOS and Linux on the QEMU quick-start paths use software emulation (TCG mode), so you can skip this section.
 
 Verify the KVM device exists:
 
@@ -116,14 +116,43 @@ After booting, you will enter the Rust user shell (`>>` prompt). Type `usertests
 ./scripts/setup_qemu.sh arceos-riscv64
 
 cargo xtask qemu \
-  --build-config configs/board/qemu-riscv64.toml \
+  --config configs/board/qemu-riscv64.toml \
   --qemu-config .github/workflows/qemu-riscv64.toml \
   --vmconfigs tmp/vmconfigs/arceos-riscv64-qemu-smp1.generated.toml
 ```
 
 Success indicator: `Hello, world!` appears in the output.
 
-`qemu-riscv64` currently supports the RISC-V ArceOS guest path. Cross-ISA boot such as `riscv64 AxVisor -> aarch64 ArceOS` is not wired up in the current hypervisor stack.
+### Linux (RISC-V64)
+
+```bash
+cd /path/to/tgoskits
+
+(cd os/axvisor && ./scripts/setup_qemu.sh linux-riscv64)
+
+sed -n '1,120p' tmp/vmconfigs/linux-riscv64-qemu-smp1.generated.toml
+
+cargo axvisor qemu \
+  --config os/axvisor/configs/board/qemu-riscv64.toml \
+  --qemu-config os/axvisor/.github/workflows/qemu-riscv64.toml \
+  --vmconfigs tmp/vmconfigs/linux-riscv64-qemu-smp1.generated.toml
+```
+
+Success indicator: `test pass!` appears in the output.
+
+What to check in `tmp/vmconfigs/linux-riscv64-qemu-smp1.generated.toml` before boot:
+
+1. `kernel_path` points to `/tmp/.axvisor-images/qemu_riscv64_linux/qemu-riscv64`
+2. `ramdisk_path` points to `/tmp/.axvisor-images/qemu_riscv64_linux/initramfs.cpio.gz`
+3. `dtb_path` points to `os/axvisor/configs/vms/linux-riscv64-qemu-smp1.dts`
+4. `excluded_devices = [["/soc/plic@c000000"]]` is present so the guest uses the emulated vPLIC instead of passthrough host PLIC
+
+If you prefer to edit the guest config manually, modify
+`os/axvisor/configs/vms/linux-riscv64-qemu-smp1.toml` first, then re-run
+`(cd os/axvisor && ./scripts/setup_qemu.sh linux-riscv64)` so the generated
+copy in `tmp/vmconfigs/` is refreshed.
+
+`qemu-riscv64` now supports RISC-V guests for both ArceOS and Linux. Cross-ISA boot such as `riscv64 AxVisor -> aarch64 ArceOS` is still not wired up in the current hypervisor stack.
 
 ## 5. What Does setup_qemu.sh Do?
 
@@ -145,7 +174,7 @@ The `kernel_path` in the VM config points to a non-existent file. Run `./scripts
 
 Your user is not in the `kvm` group. See the "KVM Setup" section above.
 
-### `qemu-system-aarch64: command not found`
+### `qemu-system-*: command not found`
 
 QEMU is not installed. Run the `apt install` command from Step 1.
 

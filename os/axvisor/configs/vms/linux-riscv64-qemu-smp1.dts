@@ -6,9 +6,9 @@
 	compatible = "riscv-virtio";
 	model = "riscv-virtio,qemu";
 
-	memory@90000000 {
+	memory@80000000 {
 		device_type = "memory";
-		reg = <0x00 0x90000000 0x00 0x40000000>;
+		reg = <0x00 0x80000000 0x00 0x05000000>;
 	};
 
 	cpus {
@@ -44,8 +44,8 @@
 	};
 
 	chosen {
-		bootargs = "earlycon=sbi console=ttyS0,115200 init=/init root=/dev/vda rw";
-		stdout-path = "/soc/serial@10000000";
+		bootargs = "earlycon=sbi console=ttyS0,115200 keep_bootcon ignore_loglevel loglevel=8 rdinit=/init root=/dev/ram rw";
+		stdout-path = "serial0:115200n8";
 	};
 
 	soc {

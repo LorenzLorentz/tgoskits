@@ -30,13 +30,12 @@ impl BaseDeviceOps<GuestPhysAddrRange> for VPlicGlobal {
         assert_eq!(width, AccessWidth::Dword);
         let reg = addr - self.addr;
         let host_addr = HostPhysAddr::from_usize(reg + self.host_plic_addr.as_usize());
-        // info!("vPlicGlobal read reg {reg:#x} width {width:?}");
         match reg {
             // priority
             PLIC_PRIORITY_OFFSET..PLIC_PENDING_OFFSET => perform_mmio_read(host_addr, width),
             // pending
             PLIC_PENDING_OFFSET..PLIC_ENABLE_OFFSET => {
-                let reg_index = reg - PLIC_PENDING_OFFSET / 4;
+                let reg_index = (reg - PLIC_PENDING_OFFSET) / 4;
                 let bit_index_start = reg_index * 32;
                 let mut val: u32 = 0;
                 let mut bit_mask: u32 = 1;
@@ -106,7 +105,6 @@ impl BaseDeviceOps<GuestPhysAddrRange> for VPlicGlobal {
         assert_eq!(width, AccessWidth::Dword);
         let reg = addr - self.addr;
         let host_addr = HostPhysAddr::from_usize(reg + self.host_plic_addr.as_usize());
-        // info!("vPlicGlobal write reg {reg:#x} width {width:?} val {val:#x}");
         match reg {
             // priority
             PLIC_PRIORITY_OFFSET..PLIC_PENDING_OFFSET => perform_mmio_write(host_addr, width, val),

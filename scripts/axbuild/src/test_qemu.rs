@@ -31,7 +31,7 @@ const ARCEOS_TEST_TARGETS: &[&str] = &[
 
 pub(crate) const STARRY_TEST_PACKAGE: &str = "starryos-test";
 const STARRY_TEST_ARCHES: &[&str] = &["x86_64", "riscv64", "aarch64", "loongarch64"];
-const AXVISOR_TEST_ARCHES: &[&str] = &["aarch64", "x86_64"];
+const AXVISOR_TEST_ARCHES: &[&str] = &["aarch64", "riscv64", "x86_64"];
 const AXVISOR_AARCH64_TEST_SHELL_PREFIX: &str = "~ #";
 const AXVISOR_AARCH64_TEST_SHELL_INIT_CMD: &str = "pwd && echo 'guest test pass!'";
 const AXVISOR_AARCH64_TEST_SUCCESS_REGEX: &[&str] = &["^guest test pass!$"];
@@ -112,7 +112,7 @@ fn default_axvisor_test_fail_regex() -> Vec<String> {
 
 pub(crate) fn axvisor_test_shell_config(arch: &str) -> anyhow::Result<ShellAutoInitConfig> {
     match arch {
-        "aarch64" => Ok(ShellAutoInitConfig {
+        "aarch64" | "riscv64" => Ok(ShellAutoInitConfig {
             shell_prefix: AXVISOR_AARCH64_TEST_SHELL_PREFIX.to_string(),
             shell_init_cmd: AXVISOR_AARCH64_TEST_SHELL_INIT_CMD.to_string(),
             success_regex: default_axvisor_test_success_regex(),
@@ -263,6 +263,10 @@ mod tests {
             ("aarch64", "aarch64-unknown-none-softfloat")
         );
         assert_eq!(
+            parse_axvisor_test_target("riscv64").unwrap(),
+            ("riscv64", "riscv64gc-unknown-none-elf")
+        );
+        assert_eq!(
             parse_axvisor_test_target("x86_64").unwrap(),
             ("x86_64", "x86_64-unknown-none")
         );
@@ -281,11 +285,11 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_axvisor_arches() {
-        let err = parse_axvisor_test_target("riscv64").unwrap_err();
+        let err = parse_axvisor_test_target("loongarch64").unwrap_err();
 
         assert!(
             err.to_string()
-                .contains("Supported arch values are: aarch64")
+                .contains("Supported arch values are: aarch64, riscv64, x86_64")
         );
     }
 

@@ -67,6 +67,8 @@ pub struct VMMemoryRegion {
     pub layout: Layout,
     /// Whether this region was allocated by the allocator and needs to be deallocated
     pub needs_dealloc: bool,
+    /// Whether the region uses an identical GPA->HPA mapping.
+    pub identical_map: bool,
 }
 
 impl VMMemoryRegion {
@@ -77,7 +79,7 @@ impl VMMemoryRegion {
 
     /// Returns `true` if the guest physical address is identical to the host virtual address.
     pub fn is_identical(&self) -> bool {
-        self.gpa.as_usize() == self.hva.as_usize()
+        self.identical_map
     }
 }
 
@@ -269,7 +271,7 @@ impl AxVM {
                 });
 
         for (gpa, len) in &pt_dev_region {
-            inner_mut.address_space.map_linear(
+            if let Err(err) = inner_mut.address_space.map_linear(
                 GuestPhysAddr::from(*gpa),
                 HostPhysAddr::from(*gpa),
                 *len,
@@ -277,7 +279,22 @@ impl AxVM {
                     | MappingFlags::READ
                     | MappingFlags::WRITE
                     | MappingFlags::USER,
-            )?;
+            ) {
+                error!(
+                    "Failed to map passthrough region for VM[{}]: gpa={:#x}, len={:#x}, err={:?}",
+                    self.id(),
+                    *gpa,
+                    *len,
+                    err
+                );
+                return Err(ax_err_type!(
+                    BadState,
+                    format!(
+                        "passthrough map conflict: gpa={:#x}, len={:#x}, err={:?}",
+                        *gpa, *len, err
+                    )
+                ));
+            }
         }
 
         #[cfg_attr(not(target_arch = "aarch64"), expect(unused_mut))]
@@ -755,6 +772,7 @@ impl AxVM {
 
         let hpa = axvisor_api::memory::virt_to_phys(hva);
 
+        let identical_map = gpa.is_none();
         let gpa = gpa.unwrap_or_else(|| hpa.as_usize().into());
 
         let mut g = self.inner_mut.lock();
@@ -769,6 +787,7 @@ impl AxVM {
             hva,
             layout,
             needs_dealloc: true, // This region was allocated and needs to be freed
+            identical_map,
         });
 
         Ok(s)
@@ -805,6 +824,7 @@ impl AxVM {
             hva,
             layout,
             needs_dealloc: false, // This is a reserved region, not allocated
+            identical_map: true,
         });
         Ok(s)
     }

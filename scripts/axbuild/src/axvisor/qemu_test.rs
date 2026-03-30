@@ -20,6 +20,11 @@ pub const LINUX_AARCH64_VMCONFIG_TEMPLATE: &str =
     "os/axvisor/configs/vms/linux-aarch64-qemu-smp1.toml";
 pub const LINUX_AARCH64_GENERATED_VMCONFIG: &str =
     "os/axvisor/tmp/vmconfigs/linux-aarch64-qemu-smp1.generated.toml";
+pub const LINUX_RISCV64_IMAGE_SPEC: &str = "qemu_riscv64_linux";
+pub const LINUX_RISCV64_VMCONFIG_TEMPLATE: &str =
+    "os/axvisor/configs/vms/linux-riscv64-qemu-smp1.toml";
+pub const LINUX_RISCV64_GENERATED_VMCONFIG: &str =
+    "os/axvisor/tmp/vmconfigs/linux-riscv64-qemu-smp1.generated.toml";
 pub const NIMBOS_X86_64_IMAGE_SPEC: &str = "qemu_x86_64_nimbos";
 pub const NIMBOS_X86_64_VMCONFIG: &str = "os/axvisor/configs/vms/nimbos-x86_64-qemu-smp1.toml";
 pub const AXVISOR_ROOTFS_IMAGE: &str = "os/axvisor/tmp/rootfs.img";
@@ -39,18 +44,60 @@ pub struct ShellAutoInitConfig {
     pub fail_regex: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LinuxGuestAssetSpec {
+    image_spec: &'static str,
+    vmconfig_template: &'static str,
+    generated_vmconfig: &'static str,
+    kernel_filename: &'static str,
+    rewrite_dtb_path: bool,
+}
+
 pub(crate) async fn prepare_linux_aarch64_guest_assets(
     ctx: &AxvisorContext,
+) -> anyhow::Result<PreparedLinuxGuestAssets> {
+    prepare_linux_guest_assets(
+        ctx,
+        LinuxGuestAssetSpec {
+            image_spec: LINUX_AARCH64_IMAGE_SPEC,
+            vmconfig_template: LINUX_AARCH64_VMCONFIG_TEMPLATE,
+            generated_vmconfig: LINUX_AARCH64_GENERATED_VMCONFIG,
+            kernel_filename: "qemu-aarch64",
+            rewrite_dtb_path: false,
+        },
+    )
+    .await
+}
+
+pub(crate) async fn prepare_linux_riscv64_guest_assets(
+    ctx: &AxvisorContext,
+) -> anyhow::Result<PreparedLinuxGuestAssets> {
+    prepare_linux_guest_assets(
+        ctx,
+        LinuxGuestAssetSpec {
+            image_spec: LINUX_RISCV64_IMAGE_SPEC,
+            vmconfig_template: LINUX_RISCV64_VMCONFIG_TEMPLATE,
+            generated_vmconfig: LINUX_RISCV64_GENERATED_VMCONFIG,
+            kernel_filename: "qemu-riscv64",
+            rewrite_dtb_path: true,
+        },
+    )
+    .await
+}
+
+async fn prepare_linux_guest_assets(
+    ctx: &AxvisorContext,
+    spec: LinuxGuestAssetSpec,
 ) -> anyhow::Result<PreparedLinuxGuestAssets> {
     let mut config = ImageConfig::read_config(ctx.workspace_root())?;
     config.local_storage = absolute_path(ctx.workspace_root(), &config.local_storage);
 
     let storage = Storage::new_from_config(&config).await?;
     let image_dir = storage
-        .pull_image(ImageSpecRef::parse(LINUX_AARCH64_IMAGE_SPEC), None, true)
+        .pull_image(ImageSpecRef::parse(spec.image_spec), None, true)
         .await?;
 
-    let kernel_path = image_dir.join("qemu-aarch64");
+    let kernel_path = image_dir.join(spec.kernel_filename);
     let rootfs_src = image_dir.join("rootfs.img");
     if !kernel_path.exists() {
         anyhow::bail!("linux guest kernel not found at {}", kernel_path.display());
@@ -60,11 +107,12 @@ pub(crate) async fn prepare_linux_aarch64_guest_assets(
     }
 
     let workspace_root = ctx.workspace_root();
-    let generated_vmconfig = workspace_root.join(LINUX_AARCH64_GENERATED_VMCONFIG);
+    let generated_vmconfig = workspace_root.join(spec.generated_vmconfig);
     generate_linux_vmconfig(
-        &workspace_root.join(LINUX_AARCH64_VMCONFIG_TEMPLATE),
+        &workspace_root.join(spec.vmconfig_template),
         &generated_vmconfig,
         &kernel_path,
+        spec.rewrite_dtb_path,
     )?;
 
     let rootfs_path = workspace_root.join(AXVISOR_ROOTFS_IMAGE);
@@ -121,18 +169,31 @@ fn generate_linux_vmconfig(
     template_path: &Path,
     output_path: &Path,
     kernel_path: &Path,
+    rewrite_dtb_path: bool,
 ) -> anyhow::Result<()> {
     let mut value = read_toml(template_path)?;
-    value
+    let kernel = value
         .get_mut("kernel")
         .and_then(toml::Value::as_table_mut)
         .ok_or_else(|| {
             anyhow::anyhow!("missing `[kernel]` section in {}", template_path.display())
-        })?
-        .insert(
-            "kernel_path".to_string(),
-            toml::Value::String(kernel_path.display().to_string()),
+        })?;
+    kernel.insert(
+        "kernel_path".to_string(),
+        toml::Value::String(kernel_path.display().to_string()),
+    );
+
+    if rewrite_dtb_path && let Some(dtb_path) = kernel.get("dtb_path").and_then(toml::Value::as_str)
+    {
+        let resolved = absolute_path(
+            template_path.parent().unwrap_or_else(|| Path::new(".")),
+            Path::new(dtb_path),
         );
+        kernel.insert(
+            "dtb_path".to_string(),
+            toml::Value::String(resolved.display().to_string()),
+        );
+    }
 
     write_toml(output_path, &value)
 }
@@ -199,7 +260,7 @@ entry_point = 1
         )
         .unwrap();
 
-        generate_linux_vmconfig(&template, &output, Path::new("/tmp/kernel.bin")).unwrap();
+        generate_linux_vmconfig(&template, &output, Path::new("/tmp/kernel.bin"), false).unwrap();
 
         let value: toml::Value = toml::from_str(&fs::read_to_string(&output).unwrap()).unwrap();
         assert_eq!(
@@ -208,6 +269,36 @@ entry_point = 1
         );
         assert_eq!(value["kernel"]["entry_point"].as_integer(), Some(1));
         assert_eq!(value["base"]["id"].as_integer(), Some(1));
+    }
+
+    #[test]
+    fn generate_linux_vmconfig_rewrites_riscv_dtb_path_relative_to_template() {
+        let dir = tempdir().unwrap();
+        let template_dir = dir.path().join("os/axvisor/configs/vms");
+        fs::create_dir_all(&template_dir).unwrap();
+        let template = template_dir.join("linux-riscv64.toml");
+        let output = dir.path().join("out/generated.toml");
+        fs::write(
+            &template,
+            r#"
+[kernel]
+kernel_path = "old"
+dtb_path = "linux-riscv64-qemu-smp1.dts"
+"#,
+        )
+        .unwrap();
+
+        generate_linux_vmconfig(&template, &output, Path::new("/tmp/kernel.bin"), true).unwrap();
+
+        let value: toml::Value = toml::from_str(&fs::read_to_string(&output).unwrap()).unwrap();
+        let expected = template_dir
+            .join("linux-riscv64-qemu-smp1.dts")
+            .display()
+            .to_string();
+        assert_eq!(
+            value["kernel"]["dtb_path"].as_str(),
+            Some(expected.as_str())
+        );
     }
 
     #[test]

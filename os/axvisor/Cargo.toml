@@ -66,12 +66,13 @@ axstd = { version = "=0.3.0-preview.3", features = [
   "alloc-level-1",
   "paging",
   "irq",
+  "ipi",
   "multitask",
   "task-ext",
   "smp",
   "hv",
 ]}
-axhal = { version = "=0.3.0-preview.3", features = ["paging", "irq", "smp", "hv"] }
+axhal = { version = "=0.3.0-preview.3", features = ["paging", "irq", "ipi", "smp", "hv"] }
 
 # System dependent modules provided by ArceOS-Hypervisor (bare-metal only)
 axaddrspace = "0.3.0"

@@ -21,12 +21,12 @@ use riscv_decode::{
     types::{IType, SType},
 };
 use riscv_h::register::{
-    hstatus, htimedelta, hvip,
+    hie, hip, hstatus, htimedelta, hvip,
     vsatp::{self, Vsatp},
     vscause::{self, Vscause},
     vsepc,
     vsie::{self, Vsie},
-    vsscratch,
+    vsip, vsscratch,
     vsstatus::{self, Vsstatus},
     vstval,
     vstvec::{self, Vstvec},
@@ -50,6 +50,51 @@ const FID_SET_TIMER: usize = 0;
 #[inline]
 fn instr_is_pseudo(ins: u32) -> bool {
     ins == TINST_PSEUDO_STORE || ins == TINST_PSEUDO_LOAD
+}
+
+#[inline]
+fn set_host_timer(deadline: u64) {
+    unsafe {
+        core::arch::asm!(
+            "csrw {csr}, {value}",
+            csr = const 0x14d,
+            value = in(reg) deadline,
+        );
+    }
+}
+
+#[inline]
+fn clear_host_timer_pending() {
+    unsafe {
+        core::arch::asm!(
+            "csrc sip, {mask}",
+            mask = in(reg) (1usize << 5),
+        );
+    }
+}
+
+#[inline]
+fn set_guest_timer(deadline: u64) {
+    unsafe {
+        core::arch::asm!(
+            "csrw {csr}, {value}",
+            csr = const 0x24d,
+            value = in(reg) deadline,
+        );
+    }
+}
+
+#[inline]
+fn read_guest_timer() -> u64 {
+    let value: u64;
+    unsafe {
+        core::arch::asm!(
+            "csrr {value}, {csr}",
+            value = out(reg) value,
+            csr = const 0x24d,
+        );
+    }
+    value
 }
 
 /// The architecture dependent configuration of a `AxArchVCpu`.
@@ -118,6 +163,13 @@ impl axvcpu::AxArchVCpu for RISCVVCpu {
             hstatus.write();
         }
         self.regs.guest_regs.hstatus = hstatus.bits();
+
+        let mut guest_hie = hie::Hie::from_bits(0);
+        guest_hie.set_vssie(true);
+        guest_hie.set_vstie(true);
+        guest_hie.set_vseie(true);
+        self.regs.virtual_hs_csrs.hie = guest_hie.bits();
+        self.regs.vs_csrs.vstimecmp = u64::MAX as usize;
         Ok(())
     }
 
@@ -135,6 +187,11 @@ impl axvcpu::AxArchVCpu for RISCVVCpu {
 
     fn run(&mut self) -> AxResult<AxVCpuExitReason> {
         unsafe {
+            // Keep guest instruction fetch coherent with any code patching done
+            // during early Linux boot (alternatives/jump labels).
+            core::arch::asm!("fence.i");
+        }
+        unsafe {
             sstatus::clear_sie();
             sie::set_sext();
             sie::set_ssoft();
@@ -150,6 +207,7 @@ impl axvcpu::AxArchVCpu for RISCVVCpu {
             sie::clear_ssoft();
             sie::clear_stimer();
             sstatus::set_sie();
+            core::arch::asm!("fence.i");
         }
         self.vmexit_handler()
     }
@@ -175,6 +233,9 @@ impl axvcpu::AxArchVCpu for RISCVVCpu {
             vsstatus.write();
             let vsie = Vsie::from_bits(self.regs.vs_csrs.vsie);
             vsie.write();
+            set_guest_timer(self.regs.vs_csrs.vstimecmp as u64);
+            let hie = hie::Hie::from_bits(self.regs.virtual_hs_csrs.hie);
+            hie.write();
             core::arch::asm!(
                 "csrw hgatp, {hgatp}",
                 hgatp = in(reg) self.regs.virtual_hs_csrs.hgatp,
@@ -196,6 +257,8 @@ impl axvcpu::AxArchVCpu for RISCVVCpu {
             self.regs.vs_csrs.vsscratch = vsscratch::read();
             self.regs.vs_csrs.vsstatus = vsstatus::read().bits();
             self.regs.vs_csrs.vsie = vsie::read().bits();
+            self.regs.vs_csrs.vstimecmp = read_guest_timer() as usize;
+            self.regs.virtual_hs_csrs.hie = hie::read().bits();
             core::arch::asm!(
                 "csrr {hgatp}, hgatp",
                 hgatp = out(reg) self.regs.virtual_hs_csrs.hgatp,
@@ -259,6 +322,7 @@ impl RISCVVCpu {
 impl RISCVVCpu {
     fn vmexit_handler(&mut self) -> AxResult<AxVCpuExitReason> {
         self.regs.trap_csrs.load_from_hw();
+        self.regs.vs_csrs.load_from_hw();
 
         let scause = scause::read();
         use riscv::interrupt::{Interrupt, Trap};
@@ -296,11 +360,15 @@ impl RISCVVCpu {
                     // Compatibility with Legacy Extensions.
                     legacy::LEGACY_SET_TIMER..=legacy::LEGACY_SHUTDOWN => match extension_id {
                         legacy::LEGACY_SET_TIMER => {
-                            // info!("set timer: {}", param[0]);
-                            sbi_rt::set_timer((param[0]) as u64);
+                            self.regs.vs_csrs.vstimecmp = param[0];
+                            set_guest_timer(param[0] as u64);
                             unsafe {
                                 // Clear guest timer interrupt
+                                clear_host_timer_pending();
+                                hip::clear_vstip();
                                 hvip::clear_vstip();
+                                vsip::clear_stip();
+                                sie::set_stimer();
                             }
 
                             self.set_gpr_from_gpr_index(GprIndex::A0, 0);
@@ -325,9 +393,14 @@ impl RISCVVCpu {
                     },
                     EID_TIME => match function_id {
                         FID_SET_TIMER => {
-                            sbi_rt::set_timer(param[0] as u64);
+                            self.regs.vs_csrs.vstimecmp = param[0];
+                            set_guest_timer(param[0] as u64);
                             unsafe {
+                                clear_host_timer_pending();
+                                hip::clear_vstip();
                                 hvip::clear_vstip();
+                                vsip::clear_stip();
+                                sie::set_stimer();
                             }
                             self.sbi_return(RET_SUCCESS, 0);
                             return Ok(AxVCpuExitReason::Nothing);
@@ -394,6 +467,21 @@ impl RISCVVCpu {
                                 &mut buf,
                                 GuestPhysAddr::from(gpa as usize),
                             );
+                            let copied = if copied == buf.len() {
+                                copied
+                            } else {
+                                debug!(
+                                    "DBCN write fallback to GVA copy: addr={:#x}, copied={}, \
+                                     len={}",
+                                    gpa,
+                                    copied,
+                                    buf.len()
+                                );
+                                guest_mem::copy_from_guest_va(
+                                    &mut buf,
+                                    GuestVirtAddr::from(gpa as usize),
+                                )
+                            };
 
                             if copied == buf.len() {
                                 let ret = console_write(&buf);
@@ -422,6 +510,19 @@ impl RISCVVCpu {
                                     &buf[..ret.value],
                                     GuestPhysAddr::from(gpa as usize),
                                 );
+                                let copied = if copied == ret.value {
+                                    copied
+                                } else {
+                                    debug!(
+                                        "DBCN read fallback to GVA copy: addr={:#x}, copied={}, \
+                                         len={}",
+                                        gpa, copied, ret.value
+                                    );
+                                    guest_mem::copy_to_guest_va(
+                                        &buf[..ret.value],
+                                        GuestVirtAddr::from(gpa as usize),
+                                    )
+                                };
                                 if copied == ret.value {
                                     self.sbi_return(RET_SUCCESS, ret.value);
                                 } else {
@@ -466,7 +567,7 @@ impl RISCVVCpu {
                     _ => {
                         let ret = self.sbi.handle_ecall(extension_id, function_id, param);
                         if ret.is_err() {
-                            warn!(
+                            debug!(
                                 "forward ecall eid {:#x} fid {:#x} param {:#x?} err {:#x} value \
                                  {:#x}",
                                 extension_id, function_id, param, ret.error, ret.value
@@ -481,10 +582,15 @@ impl RISCVVCpu {
                 Ok(AxVCpuExitReason::Nothing)
             }
             Trap::Interrupt(Interrupt::SupervisorTimer) => {
-                // Enable guest timer interrupt
+                unsafe {
+                    // Deliver exactly one virtual timer interrupt and let the guest
+                    // arm the next deadline via SBI set_timer().
+                    set_host_timer(u64::MAX);
+                    clear_host_timer_pending();
+                    sie::clear_stimer();
+                }
                 unsafe {
                     hvip::set_vstip();
-                    sie::set_stimer();
                 }
 
                 Ok(AxVCpuExitReason::Nothing)
@@ -500,6 +606,7 @@ impl RISCVVCpu {
             Trap::Exception(
                 gpf @ (Exception::LoadGuestPageFault | Exception::StoreGuestPageFault),
             ) => self.handle_guest_page_fault(gpf == Exception::StoreGuestPageFault),
+            Trap::Exception(Exception::VirtualInstruction) => self.handle_virtual_instruction(),
             _ => {
                 panic!(
                     "Unhandled trap: {:?}, sepc: {:#x}, stval: {:#x}, htval: {:#x}, htinst: \
@@ -687,6 +794,225 @@ impl RISCVVCpu {
                 }
             }
         })
+    }
+
+    /// Handle virtual instruction traps caused by VS-mode privileged instructions
+    /// that Linux executes during early boot, such as `satp` updates, `sfence.vma`,
+    /// and `wfi`.
+    fn handle_virtual_instruction(&mut self) -> AxResult<AxVCpuExitReason> {
+        use riscv_decode::{
+            Instruction,
+            types::{CsrIType, CsrType, IType, UType},
+        };
+
+        const CSR_SATP: u32 = 0x180;
+        const CSR_SSTATUS: u32 = 0x100;
+        const CSR_SIE: u32 = 0x104;
+        const CSR_STVEC: u32 = 0x105;
+        const CSR_SSCRATCH: u32 = 0x140;
+        const CSR_SEPC: u32 = 0x141;
+
+        enum CsrOp {
+            Write(CsrType),
+            Set(CsrType),
+            Clear(CsrType),
+            WriteImm(CsrIType),
+            SetImm(CsrIType),
+            ClearImm(CsrIType),
+        }
+
+        fn sign_extend_12(imm: u32) -> isize {
+            (((imm & 0xfff) as i32) << 20 >> 20) as isize
+        }
+
+        fn virtual_csr_read(this: &RISCVVCpu, csr_num: u32) -> Option<usize> {
+            Some(match csr_num {
+                CSR_SSTATUS => this.regs.vs_csrs.vsstatus,
+                CSR_SIE => this.regs.vs_csrs.vsie,
+                CSR_STVEC => this.regs.vs_csrs.vstvec,
+                CSR_SSCRATCH => this.regs.vs_csrs.vsscratch,
+                CSR_SEPC => this.regs.vs_csrs.vsepc,
+                CSR_SATP => this.regs.vs_csrs.vsatp,
+                _ => return None,
+            })
+        }
+
+        fn virtual_csr_write(this: &mut RISCVVCpu, csr_num: u32, value: usize) -> bool {
+            match csr_num {
+                CSR_SSTATUS => this.regs.vs_csrs.vsstatus = value,
+                CSR_SIE => this.regs.vs_csrs.vsie = value,
+                CSR_STVEC => this.regs.vs_csrs.vstvec = value,
+                CSR_SSCRATCH => this.regs.vs_csrs.vsscratch = value,
+                CSR_SEPC => this.regs.vs_csrs.vsepc = value,
+                CSR_SATP => {
+                    this.regs.vs_csrs.vsatp = value;
+                    unsafe {
+                        let vsatp = Vsatp::from_bits(value);
+                        vsatp.write();
+                        core::arch::riscv64::hfence_vvma_all();
+                    }
+                }
+                _ => return false,
+            }
+            true
+        }
+
+        self.regs.guest_regs.sepc = self.regs.vs_csrs.vsepc;
+        let guest_pc = GuestVirtAddr::from(self.regs.guest_regs.sepc);
+        let mut inst = [0u8; 12];
+        if guest_mem::copy_from_guest_va(&mut inst, guest_pc) != inst.len() {
+            return Err(axerrno::ax_err_type!(
+                Unsupported,
+                "failed to fetch virtual instruction from guest memory"
+            ));
+        }
+        let raw_instr = u32::from_le_bytes(inst[0..4].try_into().unwrap());
+        let instr_len = riscv_decode::instruction_length(raw_instr as u16);
+        let raw_instr = match instr_len {
+            2 => raw_instr & 0xffff,
+            4 => raw_instr,
+            _ => {
+                return Err(axerrno::ax_err_type!(
+                    Unsupported,
+                    "unsupported virtual instruction length"
+                ));
+            }
+        };
+        let decoded_instr = riscv_decode::decode(raw_instr).map_err(|_| {
+            axerrno::ax_err_type!(Unsupported, "failed to decode virtual instruction")
+        })?;
+
+        debug!(
+            "guest virtual instruction at pc {:#x}: {:?}",
+            self.regs.guest_regs.sepc, decoded_instr
+        );
+
+        let mut synthesized: Option<(CsrOp, usize, usize)> = None;
+        if let Instruction::Auipc(u) = decoded_instr {
+            let next1_raw = u32::from_le_bytes(inst[4..8].try_into().unwrap());
+            let next2_raw = u32::from_le_bytes(inst[8..12].try_into().unwrap());
+            let next1 = riscv_decode::decode(next1_raw);
+            let next2 = riscv_decode::decode(next2_raw);
+            if let (Ok(Instruction::Addi(i)), Ok(csr_instr)) = (next1, next2)
+                && i.rd() == u.rd()
+                && i.rs1() == u.rd()
+            {
+                let base = self.regs.guest_regs.sepc as isize + u.imm() as i32 as isize;
+                let loaded_val = (base + sign_extend_12(i.imm())) as usize;
+                let csr_op = match csr_instr {
+                    Instruction::Csrrw(csr) if csr.rs1() == u.rd() => Some(CsrOp::Write(csr)),
+                    Instruction::Csrrs(csr) if csr.rs1() == u.rd() => Some(CsrOp::Set(csr)),
+                    Instruction::Csrrc(csr) if csr.rs1() == u.rd() => Some(CsrOp::Clear(csr)),
+                    _ => None,
+                };
+                if let Some(csr_op) = csr_op {
+                    synthesized = Some((csr_op, loaded_val, 12));
+                }
+            } else {
+                warn!(
+                    "virtual instruction window at guest pc {:#x}: first={:?}, next1={:?}, \
+                     next2={:?}",
+                    self.regs.guest_regs.sepc, decoded_instr, next1, next2
+                );
+            }
+        }
+
+        let (csr_op, current_val_override, handled_instr_len) =
+            if let Some((op, val, len)) = synthesized {
+                (op, Some(val), len)
+            } else {
+                let op = match decoded_instr {
+                    Instruction::SfenceVma(_) | Instruction::Wfi => {
+                        self.advance_pc(instr_len);
+                        self.regs.vs_csrs.vsepc = self.regs.guest_regs.sepc;
+                        return Ok(AxVCpuExitReason::Nothing);
+                    }
+                    Instruction::Csrrw(csr) => CsrOp::Write(csr),
+                    Instruction::Csrrs(csr) => CsrOp::Set(csr),
+                    Instruction::Csrrc(csr) => CsrOp::Clear(csr),
+                    Instruction::Csrrwi(csr) => CsrOp::WriteImm(csr),
+                    Instruction::Csrrsi(csr) => CsrOp::SetImm(csr),
+                    Instruction::Csrrci(csr) => CsrOp::ClearImm(csr),
+                    _ => {
+                        warn!(
+                            "unhandled virtual instruction at guest pc {:#x}: {:?}",
+                            self.regs.guest_regs.sepc, decoded_instr
+                        );
+                        return Err(axerrno::ax_err_type!(
+                            Unsupported,
+                            "unhandled virtual instruction"
+                        ));
+                    }
+                };
+                (op, None, instr_len)
+            };
+
+        let (csr_num, rd, new_val) = match csr_op {
+            CsrOp::Write(csr) => (
+                csr.csr(),
+                csr.rd(),
+                current_val_override
+                    .unwrap_or_else(|| self.get_gpr(GprIndex::from_raw(csr.rs1()).unwrap())),
+            ),
+            CsrOp::Set(csr) => (
+                csr.csr(),
+                csr.rd(),
+                virtual_csr_read(self, csr.csr()).unwrap_or(0)
+                    | current_val_override
+                        .unwrap_or_else(|| self.get_gpr(GprIndex::from_raw(csr.rs1()).unwrap())),
+            ),
+            CsrOp::Clear(csr) => (
+                csr.csr(),
+                csr.rd(),
+                virtual_csr_read(self, csr.csr()).unwrap_or(0)
+                    & !current_val_override
+                        .unwrap_or_else(|| self.get_gpr(GprIndex::from_raw(csr.rs1()).unwrap())),
+            ),
+            CsrOp::WriteImm(csr) => (csr.csr(), csr.rd(), csr.zimm() as usize),
+            CsrOp::SetImm(csr) => (
+                csr.csr(),
+                csr.rd(),
+                virtual_csr_read(self, csr.csr()).unwrap_or(0) | csr.zimm() as usize,
+            ),
+            CsrOp::ClearImm(csr) => (
+                csr.csr(),
+                csr.rd(),
+                virtual_csr_read(self, csr.csr()).unwrap_or(0) & !(csr.zimm() as usize),
+            ),
+        };
+
+        let current_val = match virtual_csr_read(self, csr_num) {
+            Some(val) => val,
+            None => {
+                warn!(
+                    "unsupported virtual CSR access at guest pc {:#x}: csr={:#x}, instr={:?}",
+                    self.regs.guest_regs.sepc, csr_num, decoded_instr
+                );
+                return Err(axerrno::ax_err_type!(
+                    Unsupported,
+                    "unsupported virtual CSR access"
+                ));
+            }
+        };
+
+        if rd != 0 {
+            self.set_gpr_from_gpr_index(GprIndex::from_raw(rd).unwrap(), current_val);
+        }
+
+        if !virtual_csr_write(self, csr_num, new_val) {
+            warn!(
+                "unsupported virtual CSR access at guest pc {:#x}: csr={:#x}, instr={:?}",
+                self.regs.guest_regs.sepc, csr_num, decoded_instr
+            );
+            return Err(axerrno::ax_err_type!(
+                Unsupported,
+                "unsupported virtual CSR access"
+            ));
+        }
+
+        self.advance_pc(handled_instr_len);
+        self.regs.vs_csrs.vsepc = self.regs.guest_regs.sepc;
+        Ok(AxVCpuExitReason::Nothing)
     }
 }
 

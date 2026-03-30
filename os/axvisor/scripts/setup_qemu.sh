@@ -6,11 +6,13 @@ set -euo pipefail
 #   ./scripts/setup_qemu.sh [--guest] <guest>
 #   ./scripts/setup_qemu.sh arceos
 #   ./scripts/setup_qemu.sh --guest linux
+#   ./scripts/setup_qemu.sh linux-riscv64
 #   ./scripts/setup_qemu.sh nimbos
 #
-# Supported guests: arceos, arceos-riscv64, linux, nimbos
+# Supported guests: arceos, arceos-riscv64, linux, linux-riscv64, nimbos
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WORKSPACE_ROOT="$(git -C "${REPO_ROOT}" rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "${REPO_ROOT}")"
 IMAGE_STORAGE_ROOT="/tmp/.axvisor-images"
 DEFAULT_REGISTRY_URL="https://raw.githubusercontent.com/arceos-hypervisor/axvisor-guest/refs/heads/main/registry/default.toml"
 # Keep this version aligned with the guest release used in this branch.
@@ -64,11 +66,12 @@ bootstrap_image_registry() {
 }
 
 usage() {
-  echo "Usage: $0 [--guest] <arceos|arceos-riscv64|linux|nimbos>"
+  echo "Usage: $0 [--guest] <arceos|arceos-riscv64|linux|linux-riscv64|nimbos>"
   echo ""
   echo "  arceos          - aarch64 ArceOS guest"
   echo "  arceos-riscv64  - riscv64 ArceOS guest"
   echo "  linux           - aarch64 Linux guest"
+  echo "  linux-riscv64   - riscv64 Linux guest"
   echo "  nimbos          - x86_64 NimbOS guest (requires VT-x/KVM)"
   echo ""
   echo "Examples:"
@@ -88,7 +91,7 @@ while [[ $# -gt 0 ]]; do
       shift
       break
       ;;
-    arceos|arceos-riscv64|linux|nimbos)
+    arceos|arceos-riscv64|linux|linux-riscv64|nimbos)
       GUEST="$1"
       shift
       break
@@ -110,6 +113,7 @@ case "$GUEST" in
   arceos)         CFG="qemu_aarch64_arceos|arceos-aarch64-qemu-smp1.toml|qemu-aarch64.toml|qemu-aarch64.toml|qemu-aarch64|Hello, world!" ;;
   arceos-riscv64) CFG="qemu_riscv64_arceos|arceos-riscv64-qemu-smp1.toml|qemu-riscv64.toml|qemu-riscv64.toml|qemu-riscv64|Hello, world!" ;;
   linux)          CFG="qemu_aarch64_linux|linux-aarch64-qemu-smp1.toml|qemu-aarch64.toml|qemu-aarch64.toml|qemu-aarch64|test pass!" ;;
+  linux-riscv64)  CFG="qemu_riscv64_linux|linux-riscv64-qemu-smp1.toml|qemu-riscv64.toml|qemu-riscv64.toml|qemu-riscv64|test pass!" ;;
   nimbos)         CFG="qemu_x86_64_nimbos|nimbos-x86_64-qemu-smp1.toml|qemu-x86_64.toml|qemu-x86_64-kvm.toml|qemu-x86_64|usertests passed!" ;;
   *)       echo "Unknown guest: $GUEST" >&2; usage ;;
 esac
@@ -120,14 +124,15 @@ IFS='|' read -r IMAGE_NAME VMCONFIG BUILD_CONFIG QEMU_CONFIG KERNEL_FILE SUCCESS
 #  - 这里直接使用该目录作为镜像来源，避免路径不一致
 IMAGE_DIR="${IMAGE_STORAGE_ROOT}/${IMAGE_NAME}"
 VMCONFIG_TEMPLATE_PATH="${REPO_ROOT}/configs/vms/${VMCONFIG}"
-VMCONFIG_TMP_DIR="${REPO_ROOT}/tmp/vmconfigs"
+VMCONFIG_TMP_DIR="${WORKSPACE_ROOT}/tmp/vmconfigs"
 GENERATED_VMCONFIG_PATH="${VMCONFIG_TMP_DIR}/${VMCONFIG%.toml}.generated.toml"
-ROOTFS_TARGET="${REPO_ROOT}/tmp/rootfs.img"
+ROOTFS_TARGET="${WORKSPACE_ROOT}/tmp/rootfs.img"
 KERNEL_IMAGE="${IMAGE_DIR}/${KERNEL_FILE}"
 ROOTFS_IMAGE="${IMAGE_DIR}/rootfs.img"
 ABS_KERNEL_PATH="${IMAGE_DIR}/${KERNEL_FILE}"
 
 echo "[setup_qemu] Guest: ${GUEST} | Repo: ${REPO_ROOT}"
+echo "[setup_qemu] Workspace root: ${WORKSPACE_ROOT}"
 
 echo "[setup_qemu] Step 1: ensure guest image is downloaded..."
 if [ ! -d "${IMAGE_DIR}" ]; then
@@ -175,6 +180,12 @@ sed -i 's|^kernel_path *=.*|kernel_path = "'"${ABS_KERNEL_PATH}"'"|' "${GENERATE
 echo "  -> Generated VM config: ${GENERATED_VMCONFIG_PATH}"
 echo "  -> Updated kernel_path to ${ABS_KERNEL_PATH}"
 
+if [[ "$GUEST" == "linux-riscv64" ]]; then
+  DTB_SOURCE="${REPO_ROOT}/configs/vms/linux-riscv64-qemu-smp1.dts"
+  sed -i 's|^dtb_path *=.*|dtb_path = "'"${DTB_SOURCE}"'"|' "${GENERATED_VMCONFIG_PATH}"
+  echo "  -> Updated dtb_path to ${DTB_SOURCE}"
+fi
+
 if [[ "$GUEST" == "nimbos" ]]; then
   ABS_BIOS_PATH="${IMAGE_DIR}/axvm-bios.bin"
   sed -i 's|^bios_path *=.*|bios_path = "'"${ABS_BIOS_PATH}"'"|' "${GENERATED_VMCONFIG_PATH}"
@@ -194,7 +205,7 @@ You can now run the QEMU test with:
 
   cd ${REPO_ROOT}
   cargo xtask qemu \\
-    --build-config configs/board/${BUILD_CONFIG} \\
+    --config configs/board/${BUILD_CONFIG} \\
     --qemu-config .github/workflows/${QEMU_CONFIG} \\
     --vmconfigs ${GENERATED_VMCONFIG_PATH}
 

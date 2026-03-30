@@ -14,7 +14,7 @@
 ```bash
 sudo apt update && sudo apt install -y \
   build-essential gcc libssl-dev libudev-dev pkg-config \
-  qemu-system-x86 qemu-system-arm qemu-system-misc \
+  qemu-system-x86 qemu-system-arm qemu-system-misc device-tree-compiler \
   git curl wget
 ```
 
@@ -39,7 +39,7 @@ cargo +stable install ostool --version '^0.8'
 
 ## 3. KVM 配置（仅 NimbOS x86_64 需要）
 
-NimbOS 运行在 x86_64 QEMU 上并依赖 KVM 硬件加速。ArceOS 和 Linux 使用 AArch64 QEMU（TCG 模式），不需要 KVM，可跳过本节。
+NimbOS 运行在 x86_64 QEMU 上并依赖 KVM 硬件加速。QEMU 快速启动链路中的 ArceOS 和 Linux 都使用软件模拟（TCG 模式），不需要 KVM，可跳过本节。
 
 确认 KVM 设备存在：
 
@@ -116,14 +116,43 @@ cargo xtask qemu \
 ./scripts/setup_qemu.sh arceos-riscv64
 
 cargo xtask qemu \
-  --build-config configs/board/qemu-riscv64.toml \
+  --config configs/board/qemu-riscv64.toml \
   --qemu-config .github/workflows/qemu-riscv64.toml \
   --vmconfigs tmp/vmconfigs/arceos-riscv64-qemu-smp1.generated.toml
 ```
 
 启动成功标志：输出中出现 `Hello, world!`
 
-当前 `qemu-riscv64` 这条快速启动链路支持的是 RISC-V 版 ArceOS Guest。像 `riscv64 AxVisor -> aarch64 ArceOS` 这样的跨 ISA 启动，在现有 hypervisor 栈里还没有接通。
+### Linux（RISC-V64）
+
+```bash
+cd /path/to/tgoskits
+
+(cd os/axvisor && ./scripts/setup_qemu.sh linux-riscv64)
+
+sed -n '1,120p' tmp/vmconfigs/linux-riscv64-qemu-smp1.generated.toml
+
+cargo axvisor qemu \
+  --config os/axvisor/configs/board/qemu-riscv64.toml \
+  --qemu-config os/axvisor/.github/workflows/qemu-riscv64.toml \
+  --vmconfigs tmp/vmconfigs/linux-riscv64-qemu-smp1.generated.toml
+```
+
+启动成功标志：输出中出现 `test pass!`
+
+启动前建议确认 `tmp/vmconfigs/linux-riscv64-qemu-smp1.generated.toml` 里至少有以下几项：
+
+1. `kernel_path` 指向 `/tmp/.axvisor-images/qemu_riscv64_linux/qemu-riscv64`
+2. `ramdisk_path` 指向 `/tmp/.axvisor-images/qemu_riscv64_linux/initramfs.cpio.gz`
+3. `dtb_path` 指向 `os/axvisor/configs/vms/linux-riscv64-qemu-smp1.dts`
+4. 存在 `excluded_devices = [["/soc/plic@c000000"]]`，确保 Guest 使用 emulated vPLIC，而不是直通 host PLIC
+
+如果你想手工修改客户机配置，请先编辑
+`os/axvisor/configs/vms/linux-riscv64-qemu-smp1.toml`，然后重新执行
+`(cd os/axvisor && ./scripts/setup_qemu.sh linux-riscv64)`，刷新
+`tmp/vmconfigs/` 下的 generated 配置副本。
+
+当前 `qemu-riscv64` 这条快速启动链路已经支持 RISC-V 版 ArceOS 和 Linux Guest。像 `riscv64 AxVisor -> aarch64 ArceOS` 这样的跨 ISA 启动，在现有 hypervisor 栈里还没有接通。
 
 ## 5. setup_qemu.sh 做了什么
 
@@ -145,7 +174,7 @@ VM 配置中的 `kernel_path` 指向了不存在的文件。运行 `./scripts/se
 
 当前用户不在 `kvm` 组中。参见上文「KVM 配置」一节。
 
-### `qemu-system-aarch64: command not found`
+### `qemu-system-*: command not found`
 
 未安装 QEMU。执行第 1 步的 `apt install` 命令。
 

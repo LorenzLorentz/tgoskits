@@ -14,7 +14,10 @@
 
 //! FDT parsing and processing functionality.
 
-use alloc::{string::ToString, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 use axhal::{dtb, mem};
 use axvm::config::{AxVMConfig, AxVMCrateConfig, PassThroughDeviceConfig};
 use fdt_parser::{Fdt, FdtHeader, PciRange, PciSpace};
@@ -22,6 +25,8 @@ use fdt_parser::{Fdt, FdtHeader, PciRange, PciSpace};
 use crate::vmm::fdt::crate_guest_fdt_with_cache;
 #[cfg(not(target_arch = "riscv64"))]
 use crate::vmm::fdt::create::update_cpu_node;
+#[cfg(target_arch = "riscv64")]
+use alloc::collections::BTreeSet;
 
 pub fn get_host_fdt() -> &'static [u8] {
     const FDT_VALID_MAGIC: u32 = 0xd00d_feed;
@@ -249,14 +254,33 @@ pub fn parse_passthrough_devices_address(vm_cfg: &mut AxVMConfig, dtb: &[u8]) {
     } else {
         let fdt = Fdt::from_bytes(dtb)
             .expect("Failed to parse DTB image, perhaps the DTB is invalid or corrupted");
+        let excluded_device_paths: Vec<String> = vm_cfg
+            .excluded_devices()
+            .iter()
+            .flatten()
+            .cloned()
+            .collect();
+        let all_nodes: Vec<_> = fdt.all_nodes().collect();
 
         // Clear existing passthrough device configurations
         vm_cfg.clear_pass_through_devices();
 
         // Traverse all device tree nodes
-        for node in fdt.all_nodes() {
+        for (index, node) in all_nodes.iter().enumerate() {
             // Skip root node
             if node.name() == "/" || node.name().starts_with("memory") {
+                continue;
+            }
+
+            let node_path = super::device::build_node_path(&all_nodes, index);
+            let excluded = excluded_device_paths.iter().any(|excluded_path| {
+                node_path == *excluded_path
+                    || node_path
+                        .strip_prefix(excluded_path)
+                        .is_some_and(|suffix| suffix.starts_with('/'))
+            });
+            if excluded {
+                info!("Skipping excluded passthrough node {node_path}");
                 continue;
             }
 
@@ -322,6 +346,41 @@ pub fn parse_passthrough_devices_address(vm_cfg: &mut AxVMConfig, dtb: &[u8]) {
 }
 
 pub fn parse_vm_interrupt(vm_cfg: &mut AxVMConfig, dtb: &[u8]) {
+    #[cfg(target_arch = "riscv64")]
+    {
+        let fdt = Fdt::from_bytes(dtb)
+            .expect("Failed to parse DTB image, perhaps the DTB is invalid or corrupted");
+        let mut enabled_host_irqs = BTreeSet::new();
+
+        for node in fdt.all_nodes() {
+            let name = node.name();
+            if name == "/" || name.starts_with("memory") || name.contains("interrupt-controller") {
+                continue;
+            }
+
+            if let Some(interrupts) = node.interrupts() {
+                for interrupt in interrupts {
+                    for irq in interrupt {
+                        let irq = irq as usize;
+                        if enabled_host_irqs.insert(irq) {
+                            info!("Enable host PLIC IRQ {irq} for guest node {name}");
+                            axhal::irq::set_enable(irq, true);
+                        }
+                    }
+                }
+            }
+        }
+
+        vm_cfg.add_pass_through_device(PassThroughDeviceConfig {
+            name: "Fake Node".to_string(),
+            base_gpa: 0x0,
+            base_hpa: 0x0,
+            length: 0x20_0000,
+            irq_id: 0,
+        });
+        return;
+    }
+
     const GIC_PHANDLE: usize = 1;
     let fdt = Fdt::from_bytes(dtb)
         .expect("Failed to parse DTB image, perhaps the DTB is invalid or corrupted");
