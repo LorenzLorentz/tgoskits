@@ -1,0 +1,3 @@
+chmod +x /root/pipe2_nullfd
+/root/pipe2_nullfd
+echo 'All tests passed!'

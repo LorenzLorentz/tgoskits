@@ -79,12 +79,14 @@ syscalls:
     boundary_profiles:
       - flags
       - pointer_pair
+      - null_pipefd_efault
     core_modes:
       - smp1
       - smp2
     linux_refs:
       - man 2 pipe2
-    tests: []
+    tests:
+      - test-suit/starryos/probes/contract/pipe2_nullfd.c
     risk_tags:
       - errno_mismatch
       - user_buffer
@@ -160,11 +162,14 @@ syscalls:
     semantic_class: time
     boundary_profiles:
       - timespec_ptr
+      - null_timespec_efault
     core_modes:
       - smp1
+      - smp2
     linux_refs:
       - man 2 clock_gettime
-    tests: []
+    tests:
+      - test-suit/starryos/probes/contract/clock_gettime_null_ts.c
     risk_tags:
       - errno_mismatch
       - user_buffer

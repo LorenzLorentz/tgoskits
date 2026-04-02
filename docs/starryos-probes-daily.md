@@ -55,7 +55,18 @@ cargo xtask starry test qemu --target riscv64 \
   --timeout 120
 ```
 
-## 6. 日志文件与 Git
+## 6. SMP2 + 全 contract 矩阵（guest 串口 vs oracle）
+
+对每个 **`list-contract-probes.sh`** 中的探针依次 SMP2 启动、写日志、**`verify-guest-log-oracle.sh`**。若基准盘 **`target/riscv64gc-unknown-none-elf/rootfs-riscv64.img`** 不存在，矩阵会先跑 **`cargo xtask starry rootfs --arch riscv64`**（与 **`prepare-rootfs-with-probe.sh`** 共用 **`ensure-starry-base-rootfs.sh`**）。
+
+```sh
+test-suit/starryos/scripts/run-smp2-guest-matrix.sh
+# 或单探针：…/run-smp2-guest-matrix.sh pipe2_nullfd
+```
+
+默认日志目录：**`${TMPDIR:-/tmp}/starry-smp2-matrix/`**。无法取得基准盘时 **exit 2**。可选环境变量：**`STARRY_REFRESH_ROOTFS=1`**、**`SKIP_STARRY_ROOTFS_FETCH=1`**。详见 **`docs/starryos-syscall-smp-notes.md`**。
+
+## 7. 日志文件与 Git
 
 本机 **`serial.log`**、**`serial-*.log`** 已在 **`.gitignore`**，避免误提交。
 

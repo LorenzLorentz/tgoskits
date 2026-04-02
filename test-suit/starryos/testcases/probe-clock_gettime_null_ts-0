@@ -1,0 +1,3 @@
+chmod +x /root/clock_gettime_null_ts
+/root/clock_gettime_null_ts
+echo 'All tests passed!'

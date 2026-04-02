@@ -41,8 +41,12 @@ VERIFY_STRICT=1 test-suit/starryos/scripts/run-diff-probes.sh verify-oracle-all
 | `openat_enoent` | openat(2) 不存在绝对路径 → ENOENT | `expected/openat_enoent.line` |
 | `lseek_badfd` | lseek(2) 非法 fd → EBADF | `expected/lseek_badfd.line` |
 | `ioctl_badfd` | ioctl(2) 非法 fd + FIONREAD → EBADF | `expected/ioctl_badfd.line` |
+| `pipe2_nullfd` | pipe2(2) pipefd=NULL → EFAULT | `expected/pipe2_nullfd.line` |
+| `clock_gettime_null_ts` | clock_gettime(2) timespec=NULL → EFAULT | `expected/clock_gettime_null_ts.line` |
 
 列出当前 contract 名称：`test-suit/starryos/scripts/list-contract-probes.sh`
+
+**全 contract 在 SMP2 下跑 guest 并与 oracle 对齐**：`test-suit/starryos/scripts/run-smp2-guest-matrix.sh`（缺 **`rootfs-riscv64.img`** 时会先 **`cargo xtask starry rootfs --arch riscv64`**；见 **`docs/starryos-syscall-smp-notes.md`**）。
 
 ## Catalog and extract
 

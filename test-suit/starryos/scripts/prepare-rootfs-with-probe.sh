@@ -1,7 +1,7 @@
 #!/usr/bin/sh
 # Usage: prepare-rootfs-with-probe.sh <probe_basename>
 # Example: prepare-rootfs-with-probe.sh write_stdout
-# Builds all contract probes, copies base rootfs, injects /root/<probe_basename>.
+# Ensures base rootfs via ensure-starry-base-rootfs.sh, builds contract probes, copies base, injects /root/<probe_basename>.
 set -eu
 WS="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$WS"
@@ -17,10 +17,7 @@ else
 fi
 PROBE_SRC="$WS/test-suit/starryos/probes/build-riscv64/$probe"
 
-if [ ! -f "$BASE" ]; then
-  echo "Missing $BASE — run: cargo xtask starry rootfs --arch riscv64" >&2
-  exit 1
-fi
+"$WS/test-suit/starryos/scripts/ensure-starry-base-rootfs.sh"
 
 CC="${CC:-riscv64-linux-musl-gcc}"
 export CC

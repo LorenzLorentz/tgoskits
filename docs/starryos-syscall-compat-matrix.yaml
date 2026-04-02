@@ -3,6 +3,9 @@
 # 与 catalog 关系：catalog 偏「工程元数据」，本文件偏「行为对齐结论」。
 
 schema_version: 1
+# 全手写 contract：建议在 SMP2（-smp 2）下再跑串口 CASE 与 oracle 对齐：
+#   test-suit/starryos/scripts/run-smp2-guest-matrix.sh
+# 说明见 docs/starryos-syscall-smp-notes.md
 linux_profile:
   arch: riscv64
   libc: musl
@@ -44,6 +47,18 @@ entries:
     parity: partial
     notes:
       - "非法 fd + FIONREAD -> EBADF"
+
+  - syscall: pipe2
+    contract_probe: pipe2_nullfd
+    parity: partial
+    notes:
+      - "pipefd=NULL -> EFAULT（errno=14）"
+
+  - syscall: clock_gettime
+    contract_probe: clock_gettime_null_ts
+    parity: partial
+    notes:
+      - "timespec=NULL -> EFAULT（errno=14）"
 
   - syscall: lseek
     contract_probe: lseek_badfd

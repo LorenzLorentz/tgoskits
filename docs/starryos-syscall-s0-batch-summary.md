@@ -2,7 +2,7 @@
 
 ## 范围
 
-本批次对应路线中的 **S0-2**、**S0-3** 与 **S0-5** 最小落地；并已补充 **S0-1 方法说明** 与 **S0-4 矩阵骨架**（见下文链接）。**S0-6 SMP 矩阵**、**S0-7 Review** 仍待迭代。
+本批次对应路线中的 **S0-2**、**S0-3** 与 **S0-5** 最小落地；并已补充 **S0-1 方法说明** 与 **S0-4 矩阵骨架**（见下文链接）。**S0-6**：已提供 **SMP2 + 全 contract guest 串口 vs oracle** 矩阵脚本（`run-smp2-guest-matrix.sh`）；**S0-7 Review** 仍待迭代。
 
 ## 交付物清单
 
@@ -10,14 +10,15 @@
 |------|------|------|
 | 分发表提取 | `scripts/extract_starry_syscalls.py` | 解析 `handle_syscall` 的 `match`，输出 JSON |
 | 机器可读分发表 | `docs/starryos-syscall-dispatch.json` | 当前约 210 条 syscall 条目（含分区注释与 cfg） |
-| Catalog 种子 | `docs/starryos-syscall-catalog.yaml` | 14 个高优先级 syscall 元数据（含 `ioctl` / `lseek` / `openat` / `dup` / `fcntl` 等） |
+| Catalog 种子 | `docs/starryos-syscall-catalog.yaml` | 14 个高优先级 syscall 元数据（含 `pipe2` / `clock_gettime` / `ioctl` / `lseek` / `openat` / `dup` / `fcntl` 等） |
 | 探针生成器 | `scripts/gen_syscall_probes.py` | 从 catalog 生成 `*_generated.c` |
 | 手写 contract | `test-suit/starryos/probes/contract/*.c` | 含 `openat`/`ioctl`/`lseek` errno 类及 `read`/`write` 零长度等 |
 | 日常用法 | `docs/starryos-probes-daily.md` | 本地检查、oracle、QEMU、日志比对、SMP |
 | SMP QEMU | `test-suit/starryos/qemu-riscv64-smp2.toml`、`run-starry-probe-qemu-smp2.sh` | `-smp 2`；`cargo xtask starry test qemu --qemu-config …` |
 | 期望 oracle 行 | `test-suit/starryos/probes/expected/*.line` | `verify-oracle` / `verify-oracle-all` |
-| 构建/差分脚本 | `build-probes.sh`、`run-diff-probes.sh`、`list-contract-probes.sh`、`diff-guest-line.sh`、`run-starry-probe-qemu.sh` | 批量 oracle / guest 比对 / QEMU 封装 |
+| 构建/差分脚本 | `build-probes.sh`、`run-diff-probes.sh`、`list-contract-probes.sh`、`diff-guest-line.sh`、`run-starry-probe-qemu.sh`、`run-starry-probe-qemu-smp2.sh`、`run-smp2-guest-matrix.sh` | 批量 oracle / guest 比对 / QEMU 单核与 SMP2 / 全 contract 矩阵 |
 | 覆盖检查 | `scripts/check_probe_coverage.py` | catalog `tests:` 路径存在性 |
+| 基准 rootfs | `test-suit/starryos/scripts/ensure-starry-base-rootfs.sh` | 缺盘时自动 `cargo xtask starry rootfs --arch riscv64`；矩阵与 `prepare-rootfs-with-probe` 共用 |
 | 镜像注入 | `prepare-rootfs-with-probe.sh`、`prepare-rootfs-with-write_stdout-probe.sh` | 通用注入 + `write_stdout` 兼容路径 |
 | QEMU 用例 | `test-suit/starryos/testcases/probe-*-0` | `shell_init_cmd` 多行脚本 |
 | 测试方法 | `docs/starryos-syscall-testing-method.md` | 分层与扩展清单 |
@@ -69,7 +70,7 @@ cargo xtask starry test qemu --target riscv64 \
 ## 已知限制与后续工作
 
 - 默认 `cargo starry test qemu --target riscv64` 行为未改；probe 回归依赖 **`--test-disk-image`** 与注入镜像。
-- **S0-6**：多核 `smp1/smp2` 矩阵尚未接脚本。
+- **S0-6**：**`run-smp2-guest-matrix.sh`** 覆盖 `list-contract-probes` 全量；竞态敏感项（如 `futex` / `ppoll`）仍勿单独依赖固定 `expected/*.line`。
 - **S0-1 / S0-4**：已有方法与矩阵骨架文档；全文套件与矩阵逐 syscall 填全仍待迭代。
 - **S0-7**：阶段 Review 仍待单独安排。
 - 差分自动化（oracle 输出 vs guest 输出逐行比对）可在后续接 `run-diff-probes.sh` 扩展。

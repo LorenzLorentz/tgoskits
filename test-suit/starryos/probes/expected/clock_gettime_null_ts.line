@@ -1,0 +1,1 @@
+CASE clock_gettime.null_ts ret=-1 errno=14 note=handwritten
