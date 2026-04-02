@@ -328,3 +328,13 @@
 **验证**：`verify-oracle-all`；**`run-smp2-guest-matrix.sh`**。
 
 ---
+
+## 第 33–34 轮 — 矩阵失败手册增强、compat 校验、结构化 CASE diff
+
+**目标**：（33）**`check_compat_matrix.py`** 纳入 **`starryos-probes-ci.sh`**；（34）支持 **`expected/<probe>.cases`** 多行 `CASE` 的集合比对（**`extract-case-lines.sh`**、**`diff-guest-cases.sh`**、**`verify-guest-log-oracle.sh`** / **`run-diff-probes`**），并加 **selftest**。
+
+**交付物**：脚本与文档更新见本轮提交；playbook 第 4 节展开结构化比对步骤。
+
+**验证**：`./scripts/starryos-probes-ci.sh`；`VERIFY_STRICT=1 verify-oracle-all`。
+
+---

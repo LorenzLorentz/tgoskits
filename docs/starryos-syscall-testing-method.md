@@ -9,7 +9,9 @@
 3. **探针**
    - **手写 contract**：`test-suit/starryos/probes/contract/*.c`，命名建议 `<syscall>_<scenario>.c`，产出静态 riscv64 ELF。
    - **生成骨架**：`scripts/gen_syscall_probes.py` 按 `generator_hints.template` 写入 `probes/generated/`（占位，逐步替换为手写或半自动生成）。
-4. **Oracle 行**：`test-suit/starryos/probes/expected/<probe_basename>.line`，单行、可 `diff`；与 `qemu-riscv64` 下 stdout 对齐。
+4. **Oracle 期望**：
+   - **单行**：`test-suit/starryos/probes/expected/<probe_basename>.line`（与 `qemu-riscv64` 下 **首行** `^CASE ` 对齐）。
+   - **多行（结构化）**：`expected/<probe_basename>.cases`，每行一条 `CASE …`，比较时对 **日志中所有 `^CASE ` 行与期望文件分别做 `sort -u`** 后比较集合（顺序无关）。**同一探针不要同时存在 `.line` 与 `.cases`**。
 5. **Guest 回归**：`prepare-rootfs-with-probe.sh <basename>` 注入 `/root/<basename>`；`cargo xtask starry test qemu --test-disk-image … --shell-init-cmd test-suit/starryos/testcases/probe-<basename>-0`。
 
 ## 辅助脚本
@@ -22,7 +24,8 @@
 - **`run-smp2-guest-matrix.sh`**：全 contract 在 **`-smp 2`** 下跑 guest，并对 **`expected/*.line`**（或 **`.cases`**）做 **`verify-guest-log-oracle.sh`**（见 `docs/starryos-syscall-smp-notes.md`）。失败时写入 **`$LOGDIR/MATRIX_FAILURES.md`**，处理步骤见 **`docs/starryos-probes-matrix-failure-playbook.md`**。
 - **`run-starry-probe-qemu.sh <probe>`**：依次执行注入镜像与 `cargo xtask starry test qemu`（见 `test-suit/starryos/probes/README.md`）。
 - **`verify-guest-log-oracle.sh <probe> [log|-]`**：从串口/日志取首行 `^CASE `，与 `expected/<probe>.line` 自动比对（**0 / 1 / 2** 退出码）。**可不写第二个参数**，从标准输入读入（粘贴串口全文后 **Ctrl+D**）；或用完整 **`cargo xtask starry test qemu … 2>&1 | tee serial.log`** 留档后再验（完整命令见 **`test-suit/starryos/probes/README.md`**「方式 B」）。
-- **`extract-case-line.sh`** / **`diff-guest-line.sh`**：底层抽取与单行比对。
+- **`extract-case-line.sh`** / **`diff-guest-line.sh`**：底层抽取**首行** `CASE` 与单行比对。
+- **`extract-case-lines.sh`** / **`diff-guest-cases.sh`**：抽取**全部** `CASE` 行并按集合比对 **`expected/<probe>.cases`**。
 - **`scripts/starryos-probes-ci.sh`**：catalog 校验、覆盖检查、shell `sh -n`、可选交叉编译（无需 QEMU）；若仅有 **`riscv64-linux-gnu-gcc`**（如 Ubuntu）也会尝试构建。
 - **`test-suit/starryos/scripts/run-e2e-probe-smoke.sh`**：本地 **rootfs + 注入 + `cargo xtask starry test qemu`** 一键冒烟（默认不跑 CI）。
 

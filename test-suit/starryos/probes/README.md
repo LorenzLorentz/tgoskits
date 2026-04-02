@@ -62,9 +62,11 @@ python3 scripts/gen_syscall_probes.py --catalog docs/starryos-syscall-catalog.ya
 
 ## Output format
 
-One line per case, machine-parseable, e.g.:
+默认每条探针 **一行** `CASE`，机器可读，例如：
 
 `CASE write_stdout.zero_len ret=0 errno=0 note=handwritten`
+
+若一条探针需要 **多条** `CASE`（顺序可能因调度变化），使用 **`expected/<basename>.cases`**（每行一条 `CASE`，校验时对日志与期望分别 **`sort -u`** 后做集合比较）；**`verify-guest-log-oracle.sh`** 与 **`run-diff-probes.sh verify-oracle`** 会自动识别。勿与 **`.line`** 并存。
 
 ## StarryOS side
 

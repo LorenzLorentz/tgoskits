@@ -30,7 +30,11 @@
 3. **判定**：
    - StarryOS **应** 与 Linux 一致 → **内核 bug**，开 issue / 修 **`impl_path`**（见 catalog）。
    - 经评审接受差异 → 在 **`docs/starryos-syscall-compat-matrix.yaml`** 将 **`parity`** 标为 **`divergent`**，**`notes`** 写原因；必要时增加 **guest 专用期望**（见 **`docs/starryos-syscall-testing-method.md`**）。
-4. 多 **`CASE`** 场景：使用 **`expected/<probe>.cases`**（排序集合比较），见同一测试方法文档中的「结构化 diff」。
+4. 多 **`CASE`** 场景：使用 **`expected/<probe>.cases`**（**排序后的集合**比较，与日志中 **`CASE`** 行顺序无关）：
+   - 抽取：`test-suit/starryos/scripts/extract-case-lines.sh <log>`
+   - 比对：`test-suit/starryos/scripts/diff-guest-cases.sh <probe> <log>` 或 **`verify-guest-log-oracle.sh`**（自动识别 **`.cases`**）
+   - Linux oracle：`test-suit/starryos/scripts/run-diff-probes.sh verify-oracle <probe>`
+   - **勿**与 **`.line`** 并存同一探针名。
 
 ## 4. 开 issue 时建议标题格式
 

@@ -25,9 +25,9 @@ fi
   if [ "$kind" = oracle ]; then
     echo "### 建议下一步"
     echo ""
-    echo "1. \`test-suit/starryos/scripts/extract-case-line.sh '$log_file'\`（或 **\`extract-case-lines.sh\`** 若使用 \`.cases\`）"
+    echo "1. \`test-suit/starryos/scripts/extract-case-line.sh '$log_file'\`（单行）或 \`extract-case-lines.sh\` / \`diff-guest-cases.sh $probe '$log_file'\`（\`.cases\`）"
     echo "2. \`test-suit/starryos/scripts/run-diff-probes.sh verify-oracle $probe\`"
-    echo "3. 对比 \`test-suit/starryos/probes/expected/${probe}.line\`（或 \`.cases\`）"
+    echo "3. 对比 \`test-suit/starryos/probes/expected/${probe}.line\` 或 \`${probe}.cases\`"
     echo ""
   else
     echo "### 建议下一步"

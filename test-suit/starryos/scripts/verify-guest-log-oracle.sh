@@ -1,19 +1,26 @@
 #!/usr/bin/sh
-# From a QEMU/serial log (file or stdin), take the first line matching ^CASE  and
-# compare it to probes/expected/<probe>.line (same as Linux oracle).
+# Compare guest serial / log to Linux oracle.
+# - If probes/expected/<probe>.cases exists: all ^CASE lines (sorted set) must match.
+# - Else probes/expected/<probe>.line: first ^CASE line must match (legacy).
+# Do not define both .cases and .line for the same probe.
 #
 # Usage:
 #   ./verify-guest-log-oracle.sh <probe_basename> [log_file|-]
-#   ./verify-guest-log-oracle.sh write_stdout              # stdin（可粘贴串口输出，结束输入：Ctrl+D）
-#   ./verify-guest-log-oracle.sh write_stdout serial.log   # 文件（需事先存在，例如 tee 保存）
-#   ./verify-guest-log-oracle.sh write_stdout -            # 显式 stdin
-#
-# Exit: 0 match, 1 mismatch, 2 no CASE line found in input
+# Exit: 0 match, 1 mismatch, 2 no input / missing expected / both .line and .cases
 set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PKG="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 probe="${1:?usage: $0 <probe_basename> [log_file|-]}"
 shift
+
+cases="$PKG/probes/expected/${probe}.cases"
+linef="$PKG/probes/expected/${probe}.line"
+
+if [ -f "$cases" ] && [ -f "$linef" ]; then
+  echo "verify-guest-log-oracle: both .cases and .line exist for probe=$probe" >&2
+  exit 2
+fi
 
 if [ "$#" -ge 1 ]; then
   log_arg="$1"
@@ -21,6 +28,26 @@ else
   log_arg="-"
 fi
 
+if [ ! -f "$cases" ] && [ ! -f "$linef" ]; then
+  echo "verify-guest-log-oracle: missing expected for probe=$probe (.line or .cases)" >&2
+  exit 2
+fi
+
+if [ -f "$cases" ]; then
+  if [ "$log_arg" = "-" ]; then
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' EXIT
+    cat >"$tmp"
+    exec "$SCRIPT_DIR/diff-guest-cases.sh" "$probe" "$tmp"
+  fi
+  if [ ! -f "$log_arg" ]; then
+    echo "verify-guest-log-oracle: 找不到日志文件: $log_arg" >&2
+    exit 2
+  fi
+  exec "$SCRIPT_DIR/diff-guest-cases.sh" "$probe" "$log_arg"
+fi
+
+# --- single .line mode (first CASE line) ---
 if [ "$log_arg" = "-" ]; then
   line="$("$SCRIPT_DIR/extract-case-line.sh")"
 else

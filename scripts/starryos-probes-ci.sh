@@ -14,6 +14,9 @@ python3 scripts/check_probe_coverage.py
 echo "== compat matrix vs probes =="
 python3 scripts/check_compat_matrix.py
 
+echo "== structured CASE selftest =="
+"$ROOT/test-suit/starryos/scripts/selftest-structured-cases.sh"
+
 echo "== shell syntax =="
 for f in "$ROOT/test-suit/starryos/scripts/"*.sh; do
   [ -f "$f" ] || continue

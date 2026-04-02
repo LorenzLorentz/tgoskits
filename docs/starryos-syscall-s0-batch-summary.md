@@ -16,7 +16,7 @@
 | 日常用法 | `docs/starryos-probes-daily.md` | 本地检查、oracle、QEMU、日志比对、SMP |
 | SMP QEMU | `test-suit/starryos/qemu-riscv64-smp2.toml`、`run-starry-probe-qemu-smp2.sh` | `-smp 2`；`cargo xtask starry test qemu --qemu-config …` |
 | 期望 oracle 行 | `test-suit/starryos/probes/expected/*.line` | `verify-oracle` / `verify-oracle-all` |
-| 构建/差分脚本 | `build-probes.sh`、`run-diff-probes.sh`、`list-contract-probes.sh`、`diff-guest-line.sh`、`run-starry-probe-qemu.sh`、`run-starry-probe-qemu-smp2.sh`、`run-smp2-guest-matrix.sh` | 批量 oracle / guest 比对 / QEMU 单核与 SMP2 / 全 contract 矩阵 |
+| 构建/差分脚本 | `build-probes.sh`、`run-diff-probes.sh`、`list-contract-probes.sh`、`diff-guest-line.sh`、`extract-case-lines.sh`、`diff-guest-cases.sh`、`run-starry-probe-qemu.sh`、`run-starry-probe-qemu-smp2.sh`、`run-smp2-guest-matrix.sh` | oracle / 单行与多行 `CASE` 集合比对 / QEMU / SMP2 矩阵 |
 | 覆盖检查 | `scripts/check_probe_coverage.py` | catalog `tests:` 路径存在性 |
 | 矩阵一致性 | `scripts/check_compat_matrix.py` | `parity: partial|aligned` 行对应 `contract/*.c` 与 `expected/*` |
 | 基准 rootfs | `test-suit/starryos/scripts/ensure-starry-base-rootfs.sh` | 缺盘时自动 `cargo xtask starry rootfs --arch riscv64`；矩阵与 `prepare-rootfs-with-probe` 共用 |
