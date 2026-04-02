@@ -1,0 +1,1 @@
+CASE setgid_linux_contract.p1 ret=-1 errno=38 note=tbd_p1

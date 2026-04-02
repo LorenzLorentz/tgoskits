@@ -36,6 +36,12 @@ def main() -> int:
         default=Path("docs/starryos-syscall-compat-matrix.yaml"),
     )
     ap.add_argument("--root", type=Path, default=None)
+    ap.add_argument(
+        "--require-guest-golden",
+        action="store_true",
+        help="also require expected/guest-alpine323/<probe>.line or .cases for partial/aligned "
+        "(phase B closure; guest golden must be committed)",
+    )
     args = ap.parse_args()
     root = args.root
     if root is None:
@@ -45,6 +51,7 @@ def main() -> int:
     entries = data.get("entries") or []
     contract_dir = root / "test-suit" / "starryos" / "probes" / "contract"
     expected_dir = root / "test-suit" / "starryos" / "probes" / "expected"
+    guest_track = expected_dir / "guest-alpine323"
     errors: list[str] = []
 
     for e in entries:
@@ -86,13 +93,24 @@ def main() -> int:
                 f"{syscall}: expected expected/user/{probe}.line|.cases or "
                 f"expected/{probe}.line|.cases for probe {probe}"
             )
+        if args.require_guest_golden:
+            g_line = guest_track / f"{probe}.line"
+            g_cases = guest_track / f"{probe}.cases"
+            if not g_line.is_file() and not g_cases.is_file():
+                errors.append(
+                    f"{syscall}: missing guest golden guest-alpine323/{probe}.line|.cases "
+                    f"(see docs/starryos-linux-guest-oracle-pin.md)"
+                )
 
     if errors:
         print("Compat matrix probe check failed:", file=sys.stderr)
         for msg in errors:
             print(f"  {msg}", file=sys.stderr)
         return 1
-    print("Compat matrix OK: partial/aligned rows have contract + expected; divergent rows have tracking_issue.")
+    msg = "Compat matrix OK: partial/aligned rows have contract + expected; divergent rows have tracking_issue."
+    if args.require_guest_golden:
+        msg += " Guest golden (guest-alpine323) present for partial/aligned."
+    print(msg)
     return 0
 
 

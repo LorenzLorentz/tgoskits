@@ -1,0 +1,1 @@
+CASE timer_settime_noop.semantics ret=-1 errno=38 note=handwritten

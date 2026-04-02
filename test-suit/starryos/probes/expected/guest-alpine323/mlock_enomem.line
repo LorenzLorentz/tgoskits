@@ -1,1 +1,1 @@
-CASE mlock.enomem ret=0 errno=0 note=handwritten
+CASE mlock.enomem ret=-1 errno=12 note=handwritten

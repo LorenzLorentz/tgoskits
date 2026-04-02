@@ -1,0 +1,1 @@
+CASE getitimer.null_val ret=-1 errno=38 note=handwritten

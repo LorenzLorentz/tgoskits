@@ -35,6 +35,7 @@
 - 与 `guest-alpine323` 期望比对：`VERIFY_ORACLE_TRACK=guest-alpine323 STARRY_LINUX_GUEST_IMAGE=… …/run-diff-probes.sh verify-oracle-all`（无内核且 `VERIFY_STRICT=0` 时跳过 guest 校验）。  
 - 批量重写 golden：`STARRY_LINUX_GUEST_IMAGE=… ./scripts/refresh_guest_oracle_expected.sh`  
 - 物化批次（guest 轨）：`python3 scripts/materialize_syscall_batch.py --batch … --oracle-track guest-alpine323 --guest-kernel /path/to/Image`
+- 校验矩阵行在仓库内已提交 guest 金线：`python3 scripts/check_compat_matrix.py --require-guest-golden`
 
 ## expected 分轨命名
 
@@ -54,3 +55,4 @@
 | 日期 | 说明 |
 |------|------|
 | （维护者填写） | 初始钉死 Alpine 3.23.3 + 6.18 LTS 锚点 |
+| 2026-04-02 | 阶段 B：在自备 `linux-image/Image`（gitignore，见仓库根 `linux-image/`）上执行 `scripts/refresh_guest_oracle_expected.sh`，已重写 `expected/guest-alpine323/*.line` 共 **209** 份；`VERIFY_ORACLE_TRACK=guest-alpine323 VERIFY_STRICT=1 … verify-oracle-all` 通过。若干探针（如 `recvmsg_badfd`）轨 B 与轨 A errno 可能不同，以 guest 金线为准。 |

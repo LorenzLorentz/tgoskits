@@ -1,0 +1,1 @@
+CASE rt_sigtimedwait.probe_tbd ret=-1 errno=11 note=handwritten

@@ -1,0 +1,1 @@
+CASE socket.invalid_domain ret=-1 errno=97 note=handwritten
