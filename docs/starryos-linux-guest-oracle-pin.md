@@ -25,8 +25,9 @@
 - **`QEMU_SYSTEM_RISCV64`**：默认 `qemu-system-riscv64`。  
 - **`STARRY_LINUX_GUEST_TIMEOUT`**：秒，默认 `90`。  
 - **`STARRY_LINUX_GUEST_APPEND`**：追加到内核 cmdline（可选）。
+- **`STARRY_LINUX_GUEST_CC`**（可选）：用于编译 initramfs 里 **控制台 stub** 的 riscv64 交叉 `gcc`；未设置时尝试 `CROSS_COMPILE`+`gcc` 或常见 `riscv64-*-gcc`。
 
-脚本将探针 ELF **打包为 initramfs 中的 `/init`**，用 `qemu-system-riscv64 -machine virt -kernel … -initrd …` 启动；**不再使用**单独的 `STARRY_LINUX_GUEST_INITRD` 输入文件（每次由探针生成 cpio）。
+脚本将 **控制台 stub** 编为 **`/init`**（打开 `/dev/console` 后 `exec` 探针），探针 ELF 为 **`/probe`**，打成 gzip cpio 后用 `qemu-system-riscv64 -machine virt -kernel … -initrd …` 启动；**不再使用**单独的 `STARRY_LINUX_GUEST_INITRD` 输入文件。
 
 ### 相关命令
 

@@ -51,3 +51,6 @@ __pycache__/
 test-suit/starryos/probes/build-riscv64/
 serial.log
 serial-*.log
+
+# Local Linux kernel build artifacts (large binaries, do not commit)
+/linux-image/

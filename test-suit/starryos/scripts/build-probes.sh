@@ -16,6 +16,8 @@ for src in "$PKG/probes/contract/"*.c; do
   [ -f "$src" ] || continue
   base="$(basename "$src" .c)"
   echo "CC $base"
-  "$CC" -static -O2 -fno-stack-protector -o "$OUT/$base" "$src"
+  # musl riscv64 GCC still links rcrt1.o (static PIE crt) unless you pass the driver flag -no-pie;
+  # rcrt1 + ET_EXEC breaks _start_c (a1=0 → crash under real Linux); crt1.o is required for guest oracle.
+  "$CC" -static -no-pie -O2 -fno-stack-protector -fno-pie -Wl,-no-pie -o "$OUT/$base" "$src"
 done
 echo "Built probes -> $OUT"

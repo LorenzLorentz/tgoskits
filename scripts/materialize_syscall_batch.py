@@ -502,7 +502,11 @@ def run_oracle(cc: str, qemu: str, c_src: str) -> str:
         src = tdp / "p.c"
         elf = tdp / "p"
         src.write_text(c_src, encoding="utf-8")
-        subprocess.run([cc, "-static", "-O2", str(src), "-o", str(elf)], check=True, capture_output=True)
+        subprocess.run(
+            [cc, "-static", "-no-pie", "-O2", "-fno-stack-protector", "-fno-pie", "-Wl,-no-pie", str(src), "-o", str(elf)],
+            check=True,
+            capture_output=True,
+        )
         out = subprocess.run([qemu, str(elf)], capture_output=True, text=True)
         if out.returncode != 0 and out.returncode != 1:
             raise RuntimeError(f"qemu exit {out.returncode}: {out.stderr}")
@@ -527,7 +531,11 @@ def run_oracle_guest(cc: str, repo_root: Path, c_src: str, guest_kernel: str) ->
         src = tdp / "p.c"
         elf = tdp / "p"
         src.write_text(c_src, encoding="utf-8")
-        subprocess.run([cc, "-static", "-O2", str(src), "-o", str(elf)], check=True, capture_output=True)
+        subprocess.run(
+            [cc, "-static", "-no-pie", "-O2", "-fno-stack-protector", "-fno-pie", "-Wl,-no-pie", str(src), "-o", str(elf)],
+            check=True,
+            capture_output=True,
+        )
         env = os.environ.copy()
         env["STARRY_LINUX_GUEST_IMAGE"] = guest_kernel
         proc = subprocess.run(
