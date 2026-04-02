@@ -192,135 +192,70 @@ entries:
   notes:
   - AT_FDCWD + 路径不存在 -> ENOENT；B01-fs-ctl
 - syscall: chmod
-  parity: not_applicable
-  planned_contract_probe: chmod_enoent
+  contract_probe: chmod_enoent
+  parity: partial
   notes:
-  - rollout_batch=B02-file-ops
-  - suggested_case=missing abs path -> ENOENT (errno=2)
-  - probe_pattern=errno_enoent_path
-  - handler=sys_chmod
-  - section=file ops
-  - Promote to parity partial after contract/*.c + expected exist; then run check_compat_matrix.py
+  - B02-file-ops contract probe
 - syscall: chown
-  parity: not_applicable
-  planned_contract_probe: chown_enoent
+  contract_probe: chown_enoent
+  parity: partial
   notes:
-  - rollout_batch=B02-file-ops
-  - suggested_case=missing abs path -> ENOENT (errno=2)
-  - probe_pattern=errno_enoent_path
-  - handler=sys_chown
-  - section=file ops
-  - Promote to parity partial after contract/*.c + expected exist; then run check_compat_matrix.py
+  - B02-file-ops contract probe
 - syscall: fchmod
-  parity: not_applicable
-  planned_contract_probe: fchmod_badfd
+  contract_probe: fchmod_badfd
+  parity: partial
   notes:
-  - rollout_batch=B02-file-ops
-  - suggested_case=fd=-1 -> EBADF (errno=9)
-  - probe_pattern=errno_badfd
-  - handler=sys_fchmod
-  - section=file ops
-  - Promote to parity partial after contract/*.c + expected exist; then run check_compat_matrix.py
+  - B02-file-ops contract probe
 - syscall: fchmodat
-  parity: not_applicable
-  planned_contract_probe: fchmodat_enoent
+  contract_probe: fchmodat_enoent
+  parity: partial
   notes:
-  - rollout_batch=B02-file-ops
-  - suggested_case=AT_FDCWD + missing path -> ENOENT
-  - probe_pattern=errno_enoent_at
-  - handler=sys_fchmodat
-  - section=file ops
-  - Promote to parity partial after contract/*.c + expected exist; then run check_compat_matrix.py
+  - B02-file-ops contract probe
 - syscall: fchmodat2
-  parity: not_applicable
-  planned_contract_probe: fchmodat2_enoent
+  contract_probe: fchmodat2_enoent
+  parity: partial
   notes:
-  - rollout_batch=B02-file-ops
-  - suggested_case=AT_FDCWD + missing path -> ENOENT
-  - probe_pattern=errno_enoent_at
-  - handler=sys_fchmodat
-  - section=file ops
-  - Promote to parity partial after contract/*.c + expected exist; then run check_compat_matrix.py
+  - B02-file-ops contract probe
 - syscall: fchown
-  parity: not_applicable
-  planned_contract_probe: fchown_badfd
+  contract_probe: fchown_badfd
+  parity: partial
   notes:
-  - rollout_batch=B02-file-ops
-  - suggested_case=fd=-1 -> EBADF (errno=9)
-  - probe_pattern=errno_badfd
-  - handler=sys_fchown
-  - section=file ops
-  - Promote to parity partial after contract/*.c + expected exist; then run check_compat_matrix.py
+  - B02-file-ops contract probe
 - syscall: fchownat
-  parity: not_applicable
-  planned_contract_probe: fchownat_enoent
+  contract_probe: fchownat_enoent
+  parity: partial
   notes:
-  - rollout_batch=B02-file-ops
-  - suggested_case=AT_FDCWD + missing path -> ENOENT
-  - probe_pattern=errno_enoent_at
-  - handler=sys_fchownat
-  - section=file ops
-  - Promote to parity partial after contract/*.c + expected exist; then run check_compat_matrix.py
+  - B02-file-ops contract probe
 - syscall: lchown
-  parity: not_applicable
-  planned_contract_probe: lchown_enoent
+  contract_probe: lchown_enoent
+  parity: partial
   notes:
-  - rollout_batch=B02-file-ops
-  - suggested_case=missing abs path -> ENOENT (errno=2)
-  - probe_pattern=errno_enoent_path
-  - handler=sys_lchown
-  - section=file ops
-  - Promote to parity partial after contract/*.c + expected exist; then run check_compat_matrix.py
+  - B02-file-ops contract probe
 - syscall: readlink
-  parity: not_applicable
-  planned_contract_probe: readlink_enoent
+  contract_probe: readlink_enoent
+  parity: partial
   notes:
-  - rollout_batch=B02-file-ops
-  - suggested_case=missing abs path -> ENOENT (errno=2)
-  - probe_pattern=errno_enoent_path
-  - handler=sys_readlink
-  - section=file ops
-  - Promote to parity partial after contract/*.c + expected exist; then run check_compat_matrix.py
+  - B02-file-ops contract probe
 - syscall: readlinkat
-  parity: not_applicable
-  planned_contract_probe: readlinkat_enoent
+  contract_probe: readlinkat_enoent
+  parity: partial
   notes:
-  - rollout_batch=B02-file-ops
-  - suggested_case=AT_FDCWD + missing path -> ENOENT
-  - probe_pattern=errno_enoent_at
-  - handler=sys_readlinkat
-  - section=file ops
-  - Promote to parity partial after contract/*.c + expected exist; then run check_compat_matrix.py
+  - B02-file-ops contract probe
 - syscall: utime
-  parity: not_applicable
-  planned_contract_probe: utime_enoent
+  contract_probe: utime_enoent
+  parity: partial
   notes:
-  - rollout_batch=B02-file-ops
-  - suggested_case=missing abs path -> ENOENT (errno=2)
-  - probe_pattern=errno_enoent_path
-  - handler=sys_utime
-  - section=file ops
-  - Promote to parity partial after contract/*.c + expected exist; then run check_compat_matrix.py
+  - B02-file-ops contract probe
 - syscall: utimensat
-  parity: not_applicable
-  planned_contract_probe: utimensat_enoent
+  contract_probe: utimensat_enoent
+  parity: partial
   notes:
-  - rollout_batch=B02-file-ops
-  - suggested_case=AT_FDCWD + missing path -> ENOENT
-  - probe_pattern=errno_enoent_at
-  - handler=sys_utimensat
-  - section=file ops
-  - Promote to parity partial after contract/*.c + expected exist; then run check_compat_matrix.py
+  - B02-file-ops contract probe
 - syscall: utimes
-  parity: not_applicable
-  planned_contract_probe: utimes_enoent
+  contract_probe: utimes_enoent
+  parity: partial
   notes:
-  - rollout_batch=B02-file-ops
-  - suggested_case=missing abs path -> ENOENT (errno=2)
-  - probe_pattern=errno_enoent_path
-  - handler=sys_utimes
-  - section=file ops
-  - Promote to parity partial after contract/*.c + expected exist; then run check_compat_matrix.py
+  - B02-file-ops contract probe
 - syscall: close_range
   parity: not_applicable
   planned_contract_probe: close_range_badfd

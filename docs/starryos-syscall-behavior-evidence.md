@@ -33,19 +33,19 @@
 | `renameat2` | `sys_renameat2` | partial | renameat2_enoent | renameat2_enoent |
 | `sync` | `sys_sync` | partial | sync_void_smoke | sync_void_smoke |
 | `syncfs` | `sys_syncfs` | partial | syncfs_badfd | syncfs_badfd |
-| `chown` | `sys_chown` | not_applicable | (planned) chown_enoent | — |
-| `lchown` | `sys_lchown` | not_applicable | (planned) lchown_enoent | — |
-| `fchown` | `sys_fchown` | not_applicable | (planned) fchown_badfd | — |
-| `fchownat` | `sys_fchownat` | not_applicable | (planned) fchownat_enoent | — |
-| `chmod` | `sys_chmod` | not_applicable | (planned) chmod_enoent | — |
-| `fchmod` | `sys_fchmod` | not_applicable | (planned) fchmod_badfd | — |
-| `fchmodat` | `sys_fchmodat` | not_applicable | (planned) fchmodat_enoent | — |
-| `fchmodat2` | `sys_fchmodat` | not_applicable | (planned) fchmodat2_enoent | — |
-| `readlink` | `sys_readlink` | not_applicable | (planned) readlink_enoent | — |
-| `readlinkat` | `sys_readlinkat` | not_applicable | (planned) readlinkat_enoent | — |
-| `utime` | `sys_utime` | not_applicable | (planned) utime_enoent | — |
-| `utimes` | `sys_utimes` | not_applicable | (planned) utimes_enoent | — |
-| `utimensat` | `sys_utimensat` | not_applicable | (planned) utimensat_enoent | — |
+| `chown` | `sys_chown` | partial | chown_enoent | chown_enoent |
+| `lchown` | `sys_lchown` | partial | lchown_enoent | lchown_enoent |
+| `fchown` | `sys_fchown` | partial | fchown_badfd | fchown_badfd |
+| `fchownat` | `sys_fchownat` | partial | fchownat_enoent | fchownat_enoent |
+| `chmod` | `sys_chmod` | partial | chmod_enoent | chmod_enoent |
+| `fchmod` | `sys_fchmod` | partial | fchmod_badfd | fchmod_badfd |
+| `fchmodat` | `sys_fchmodat` | partial | fchmodat_enoent | fchmodat_enoent |
+| `fchmodat2` | `sys_fchmodat` | partial | fchmodat2_enoent | fchmodat2_enoent |
+| `readlink` | `sys_readlink` | partial | readlink_enoent | readlink_enoent |
+| `readlinkat` | `sys_readlinkat` | partial | readlinkat_enoent | readlinkat_enoent |
+| `utime` | `sys_utime` | partial | utime_enoent | utime_enoent |
+| `utimes` | `sys_utimes` | partial | utimes_enoent | utimes_enoent |
+| `utimensat` | `sys_utimensat` | partial | utimensat_enoent | utimensat_enoent |
 | `open` | `sys_open` | not_applicable | (planned) open_enoent | — |
 | `openat` | `sys_openat` | partial | openat_badfd | openat_badfd, openat_enoent |
 | `close` | `sys_close` | partial | close_badfd | close_badfd |
