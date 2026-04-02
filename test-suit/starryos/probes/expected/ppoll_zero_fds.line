@@ -1,0 +1,1 @@
+CASE ppoll.zero_fds_timeout0 ret=0 errno=0 note=handwritten

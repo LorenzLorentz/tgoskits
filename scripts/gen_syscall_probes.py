@@ -9,8 +9,8 @@ Division of labor (see docs/starryos-syscall-testing-method.md):
   the oracle source of truth — regenerate to refresh ``generated/*.c`` after catalog edits.
 - ``contract_errno`` / ``contract_stub`` / other unknown templates: ``emit_stub`` placeholders
   only; replace with hand-written ``contract/*.c`` before relying on oracle lines.
-- **futex** / **ppoll**: keep ``contract_stub``; do not add fixed ``expected/*.line`` until
-  dedicated SMP-safe scenarios exist.
+- **futex** / **ppoll**: catalog uses ``contract_futex_wake_nop`` / ``contract_ppoll_zero_fds``
+  for minimal non-blocking probes; **wait/阻塞/多核竞态** 仍须单独设计，勿把本探针当作语义全覆盖。
 """
 
 from __future__ import annotations
@@ -85,6 +85,46 @@ int main(void) {{
 """
 
 
+def emit_futex_wake_nop(syscall: str, note: str) -> str:
+    return f"""/* GENERATED — {syscall} — template contract_futex_wake_nop */
+#include <errno.h>
+#include <linux/futex.h>
+#include <stdio.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+static int u;
+
+int main(void) {{
+  errno = 0;
+  long r = syscall(SYS_futex, &u, FUTEX_WAKE, 1, NULL, NULL, 0);
+  int e = errno;
+  dprintf(1, "CASE futex.wake_nop ret=%ld errno=%d note={note}\\n", r, e);
+  return 0;
+}}
+"""
+
+
+def emit_ppoll_zero_fds(syscall: str, note: str) -> str:
+    return f"""/* GENERATED — {syscall} — template contract_ppoll_zero_fds */
+#define _GNU_SOURCE
+#include <errno.h>
+#include <poll.h>
+#include <stdio.h>
+#include <time.h>
+
+int main(void) {{
+  struct pollfd fds[1];
+  struct timespec ts = {{ 0, 0 }};
+  errno = 0;
+  int r = ppoll(fds, 0, &ts, NULL);
+  int e = errno;
+  dprintf(1, "CASE ppoll.zero_fds_timeout0 ret=%d errno=%d note={note}\\n", r, e);
+  return 0;
+}}
+"""
+
+
 def emit_stub(syscall: str, template: str) -> str:
     return f"""/* GENERATED — {syscall} — template {template} (stub) */
 #include <stdio.h>
@@ -125,6 +165,10 @@ def main() -> None:
             body = emit_execve_enoent(name, "generated-from-catalog")
         elif tpl == "contract_wait4_echild":
             body = emit_wait4_echild(name, "generated-from-catalog")
+        elif tpl == "contract_futex_wake_nop":
+            body = emit_futex_wake_nop(name, "generated-from-catalog")
+        elif tpl == "contract_ppoll_zero_fds":
+            body = emit_ppoll_zero_fds(name, "generated-from-catalog")
         else:
             body = emit_stub(name, tpl)
         out = args.out_dir / f"{name}_generated.c"

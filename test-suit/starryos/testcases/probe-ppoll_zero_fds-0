@@ -1,0 +1,3 @@
+chmod +x /root/ppoll_zero_fds
+/root/ppoll_zero_fds
+echo 'All tests passed!'

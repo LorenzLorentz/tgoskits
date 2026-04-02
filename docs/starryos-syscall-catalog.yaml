@@ -267,18 +267,20 @@ syscalls:
     boundary_profiles:
       - wait_wake
       - timeout
+      - wake_nop_zero
     core_modes:
       - smp1
       - smp2
     linux_refs:
       - man 2 futex
-    tests: []
+    tests:
+      - test-suit/starryos/probes/contract/futex_wake_nop.c
     risk_tags:
       - blocking_signal
       - smp_race
       - cross_core_wakeup
     generator_hints:
-      template: contract_stub
+      template: contract_futex_wake_nop
 
   - syscall: ppoll
     domain: io_mpx
@@ -289,14 +291,16 @@ syscalls:
     boundary_profiles:
       - timeout
       - sigmask
+      - zero_fds_immediate
     core_modes:
       - smp1
       - smp2
     linux_refs:
       - man 2 ppoll
-    tests: []
+    tests:
+      - test-suit/starryos/probes/contract/ppoll_zero_fds.c
     risk_tags:
       - blocking_signal
       - errno_mismatch
     generator_hints:
-      template: contract_stub
+      template: contract_ppoll_zero_fds

@@ -45,6 +45,8 @@ VERIFY_STRICT=1 test-suit/starryos/scripts/run-diff-probes.sh verify-oracle-all
 | `clock_gettime_null_ts` | clock_gettime(2) timespec=NULL → EFAULT | `expected/clock_gettime_null_ts.line` |
 | `execve_enoent` | execve(2) 不存在路径 → ENOENT | `expected/execve_enoent.line` |
 | `wait4_echild` | wait4(2) 非子进程 pid → ECHILD | `expected/wait4_echild.line` |
+| `futex_wake_nop` | futex FUTEX_WAKE 无等待者 → 0 | `expected/futex_wake_nop.line` |
+| `ppoll_zero_fds` | ppoll(2) nfds=0 + 零超时 → 立即返回 | `expected/ppoll_zero_fds.line` |
 
 列出当前 contract 名称：`test-suit/starryos/scripts/list-contract-probes.sh`
 

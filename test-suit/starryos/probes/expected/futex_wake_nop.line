@@ -1,0 +1,1 @@
+CASE futex.wake_nop ret=0 errno=0 note=handwritten

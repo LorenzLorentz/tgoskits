@@ -1,0 +1,3 @@
+chmod +x /root/futex_wake_nop
+/root/futex_wake_nop
+echo 'All tests passed!'

@@ -87,15 +87,17 @@ entries:
       - "非本子进程 pid -> ECHILD（errno=10）"
 
   - syscall: futex
-    contract_probe: ""
-    parity: not_applicable
+    contract_probe: futex_wake_nop
+    parity: partial
     notes:
-      - "多核唤醒/竞态敏感；不设固定 expected/*.line，待专用用例与匹配策略（见测试方法文档）"
+      - "FUTEX_WAKE 无等待者 -> ret=0（非阻塞最小用例）；wait/竞态仍须单独矩阵"
+      - "SMP2 guest：run-smp2-guest-matrix.sh"
 
   - syscall: ppoll
-    contract_probe: ""
-    parity: not_applicable
+    contract_probe: ppoll_zero_fds
+    parity: partial
     notes:
-      - "阻塞/信号/超时组合敏感；不设固定 expected/*.line，待专用用例"
+      - "nfds=0 + 零超时 -> 立即返回；阻塞/信号掩码组合仍须扩展用例"
+      - "SMP2 guest：run-smp2-guest-matrix.sh"
 
 # 后续：为 catalog 中其余条目追加 rows，并链接 issues / errno 对照表。

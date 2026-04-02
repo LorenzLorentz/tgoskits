@@ -318,3 +318,13 @@
 **验证**：`./scripts/starryos-probes-ci.sh`；`VERIFY_STRICT=1 verify-oracle-all`；本地 **`run-smp2-guest-matrix.sh`**（全 contract）。
 
 ---
+
+## 第 32 轮 — catalog 末项 stub 收口：`futex` / `ppoll` 最小 contract
+
+**目标**：为 catalog 中仍 **`contract_stub`** 且 **`tests: []`** 的 **`futex` / `ppoll`** 增加 **非阻塞、输出确定** 的手写探针，并更新矩阵与生成器模板。
+
+**交付物**：**`futex_wake_nop`**（`FUTEX_WAKE` 无等待者）、**`ppoll_zero_fds`**（`nfds=0` + 零超时；**`fds` 用栈上哑元** 以避免部分内核对 `fds=NULL` 的 `EFAULT`）；catalog / compat-matrix / **`gen_syscall_probes.py`** 模板 **`contract_futex_wake_nop`** / **`contract_ppoll_zero_fds`**。
+
+**验证**：`verify-oracle-all`；**`run-smp2-guest-matrix.sh`**。
+
+---
