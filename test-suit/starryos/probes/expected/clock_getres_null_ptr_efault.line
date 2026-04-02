@@ -1,0 +1,1 @@
+CASE clock_getres.null_ptr ret=0 errno=0 note=handwritten

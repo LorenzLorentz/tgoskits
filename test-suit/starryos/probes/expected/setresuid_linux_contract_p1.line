@@ -1,0 +1,1 @@
+CASE setresuid_linux_contract.p1 ret=0 errno=0 note=tbd_p1

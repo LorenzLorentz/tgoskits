@@ -1,0 +1,1 @@
+CASE fanotify_init_stub.semantics ret=-1 errno=38 note=handwritten

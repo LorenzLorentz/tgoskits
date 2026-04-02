@@ -111,9 +111,21 @@ BADFD_STMT: dict[str, tuple[list[str], str, bool]] = {
         "char b; ssize_t r = recvfrom(-1, &b, 1, 0, NULL, NULL);",
         False,
     ),
-    "recvmsg": (["errno.h", "stdio.h", "sys/socket.h"], "ssize_t r = recvmsg(-1, NULL, 0);", False),
+    "recvmsg": (
+        ["errno.h", "stdio.h", "string.h", "sys/socket.h"],
+        """struct msghdr mh;
+	memset(&mh, 0, sizeof(mh));
+	ssize_t r = recvmsg(-1, &mh, 0);""",
+        False,
+    ),
     "sendfile": (["errno.h", "stdio.h", "sys/sendfile.h"], "ssize_t r = sendfile(-1, -1, NULL, 0);", False),
-    "sendmsg": (["errno.h", "stdio.h", "sys/socket.h"], "ssize_t r = sendmsg(-1, NULL, 0);", False),
+    "sendmsg": (
+        ["errno.h", "stdio.h", "string.h", "sys/socket.h"],
+        """struct msghdr mh;
+	memset(&mh, 0, sizeof(mh));
+	ssize_t r = sendmsg(-1, &mh, 0);""",
+        False,
+    ),
     "sendto": (
         ["errno.h", "stdio.h", "sys/socket.h"],
         "char b = 0; ssize_t r = sendto(-1, &b, 1, 0, NULL, 0);",

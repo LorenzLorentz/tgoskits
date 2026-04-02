@@ -1,0 +1,1 @@
+CASE perf_event_open_stub.semantics ret=-1 errno=38 note=handwritten

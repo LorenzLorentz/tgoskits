@@ -1652,3 +1652,2321 @@ syscalls:
   - errno_mismatch
   generator_hints:
     template: contract_errno
+- syscall: access
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 access
+  tests:
+  - test-suit/starryos/probes/contract/access_enoent.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: faccessat
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 faccessat
+  tests:
+  - test-suit/starryos/probes/contract/faccessat_enoent.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: faccessat2
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 faccessat2
+  tests:
+  - test-suit/starryos/probes/contract/faccessat2_enoent.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: fstat
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 fstat
+  tests:
+  - test-suit/starryos/probes/contract/fstat_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: fstatat
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 fstatat
+  tests:
+  - test-suit/starryos/probes/contract/fstatat_enoent.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: fstatfs
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 fstatfs
+  tests:
+  - test-suit/starryos/probes/contract/fstatfs_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: lstat
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 lstat
+  tests:
+  - test-suit/starryos/probes/contract/lstat_enoent.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: newfstatat
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 newfstatat
+  tests:
+  - test-suit/starryos/probes/contract/newfstatat_enoent.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: stat
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 stat
+  tests:
+  - test-suit/starryos/probes/contract/stat_enoent.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: statfs
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 statfs
+  tests:
+  - test-suit/starryos/probes/contract/statfs_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: statx
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 statx
+  tests:
+  - test-suit/starryos/probes/contract/statx_enoent.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: eventfd2
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 eventfd2
+  tests:
+  - test-suit/starryos/probes/contract/eventfd2_einval.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: memfd_create
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 memfd_create
+  tests:
+  - test-suit/starryos/probes/contract/memfd_create_einval.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: mount
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 mount
+  tests:
+  - test-suit/starryos/probes/contract/mount_enoent.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: pidfd_getfd
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 pidfd_getfd
+  tests:
+  - test-suit/starryos/probes/contract/pidfd_getfd_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: pidfd_open
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 pidfd_open
+  tests:
+  - test-suit/starryos/probes/contract/pidfd_open_esrch.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: pidfd_send_signal
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 pidfd_send_signal
+  tests:
+  - test-suit/starryos/probes/contract/pidfd_send_signal_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: pipe
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 pipe
+  tests:
+  - test-suit/starryos/probes/contract/pipe_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: umount2
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 umount2
+  tests:
+  - test-suit/starryos/probes/contract/umount2_enoent.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: sched_getaffinity
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 sched_getaffinity
+  tests:
+  - test-suit/starryos/probes/contract/sched_getaffinity_null_ptr_efault.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: sched_setaffinity
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 sched_setaffinity
+  tests:
+  - test-suit/starryos/probes/contract/sched_setaffinity_null_ptr_efault.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: clock_getres
+  domain: time
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 clock_getres
+  tests:
+  - test-suit/starryos/probes/contract/clock_getres_null_ptr_efault.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getitimer
+  domain: time
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getitimer
+  tests:
+  - test-suit/starryos/probes/contract/getitimer_null_ptr_efault.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: gettimeofday
+  domain: time
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 gettimeofday
+  tests:
+  - test-suit/starryos/probes/contract/gettimeofday_null_ptr_efault.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: setitimer
+  domain: time
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 setitimer
+  tests:
+  - test-suit/starryos/probes/contract/setitimer_null_ptr_efault.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: accept
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 accept
+  tests:
+  - test-suit/starryos/probes/contract/accept_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: accept4
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 accept4
+  tests:
+  - test-suit/starryos/probes/contract/accept4_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: bind
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 bind
+  tests:
+  - test-suit/starryos/probes/contract/bind_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: connect
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 connect
+  tests:
+  - test-suit/starryos/probes/contract/connect_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getpeername
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getpeername
+  tests:
+  - test-suit/starryos/probes/contract/getpeername_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getsockname
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getsockname
+  tests:
+  - test-suit/starryos/probes/contract/getsockname_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getsockopt
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getsockopt
+  tests:
+  - test-suit/starryos/probes/contract/getsockopt_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: listen
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 listen
+  tests:
+  - test-suit/starryos/probes/contract/listen_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: recvfrom
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 recvfrom
+  tests:
+  - test-suit/starryos/probes/contract/recvfrom_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: recvmsg
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 recvmsg
+  tests:
+  - test-suit/starryos/probes/contract/recvmsg_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: sendmsg
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 sendmsg
+  tests:
+  - test-suit/starryos/probes/contract/sendmsg_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: sendto
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 sendto
+  tests:
+  - test-suit/starryos/probes/contract/sendto_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: setsockopt
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 setsockopt
+  tests:
+  - test-suit/starryos/probes/contract/setsockopt_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: shutdown
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 shutdown
+  tests:
+  - test-suit/starryos/probes/contract/shutdown_badfd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: socket
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 socket
+  tests:
+  - test-suit/starryos/probes/contract/socket_invalid_domain.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: socketpair
+  domain: net
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/net/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 socketpair
+  tests:
+  - test-suit/starryos/probes/contract/socketpair_einval.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: capget
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 capget
+  tests:
+  - test-suit/starryos/probes/contract/capget_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: capset
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 capset
+  tests:
+  - test-suit/starryos/probes/contract/capset_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: get_mempolicy
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 get_mempolicy
+  tests:
+  - test-suit/starryos/probes/contract/get_mempolicy_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: prctl
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 prctl
+  tests:
+  - test-suit/starryos/probes/contract/prctl_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: prlimit64
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 prlimit64
+  tests:
+  - test-suit/starryos/probes/contract/prlimit64_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: set_tid_address
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 set_tid_address
+  tests:
+  - test-suit/starryos/probes/contract/set_tid_address_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: setresgid
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 setresgid
+  tests:
+  - test-suit/starryos/probes/contract/setresgid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: setresuid
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 setresuid
+  tests:
+  - test-suit/starryos/probes/contract/setresuid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: setreuid
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 setreuid
+  tests:
+  - test-suit/starryos/probes/contract/setreuid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: umask
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 umask
+  tests:
+  - test-suit/starryos/probes/contract/umask_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: clock_nanosleep
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 clock_nanosleep
+  tests:
+  - test-suit/starryos/probes/contract/clock_nanosleep_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getpriority
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getpriority
+  tests:
+  - test-suit/starryos/probes/contract/getpriority_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: nanosleep
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 nanosleep
+  tests:
+  - test-suit/starryos/probes/contract/nanosleep_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: sched_getparam
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 sched_getparam
+  tests:
+  - test-suit/starryos/probes/contract/sched_getparam_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: sched_getscheduler
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 sched_getscheduler
+  tests:
+  - test-suit/starryos/probes/contract/sched_getscheduler_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: sched_setscheduler
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 sched_setscheduler
+  tests:
+  - test-suit/starryos/probes/contract/sched_setscheduler_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: sched_yield
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 sched_yield
+  tests:
+  - test-suit/starryos/probes/contract/sched_yield_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getpid
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getpid
+  tests:
+  - test-suit/starryos/probes/contract/getpid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getppid
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getppid
+  tests:
+  - test-suit/starryos/probes/contract/getppid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getrusage
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getrusage
+  tests:
+  - test-suit/starryos/probes/contract/getrusage_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: gettid
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 gettid
+  tests:
+  - test-suit/starryos/probes/contract/gettid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: get_robust_list
+  domain: signal
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 get_robust_list
+  tests:
+  - test-suit/starryos/probes/contract/get_robust_list_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: kill
+  domain: signal
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 kill
+  tests:
+  - test-suit/starryos/probes/contract/kill_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: rt_sigaction
+  domain: signal
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 rt_sigaction
+  tests:
+  - test-suit/starryos/probes/contract/rt_sigaction_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: rt_sigpending
+  domain: signal
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 rt_sigpending
+  tests:
+  - test-suit/starryos/probes/contract/rt_sigpending_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: rt_sigprocmask
+  domain: signal
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 rt_sigprocmask
+  tests:
+  - test-suit/starryos/probes/contract/rt_sigprocmask_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: rt_sigqueueinfo
+  domain: signal
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 rt_sigqueueinfo
+  tests:
+  - test-suit/starryos/probes/contract/rt_sigqueueinfo_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: rt_tgsigqueueinfo
+  domain: signal
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 rt_tgsigqueueinfo
+  tests:
+  - test-suit/starryos/probes/contract/rt_tgsigqueueinfo_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: set_robust_list
+  domain: signal
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 set_robust_list
+  tests:
+  - test-suit/starryos/probes/contract/set_robust_list_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: sigaltstack
+  domain: signal
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 sigaltstack
+  tests:
+  - test-suit/starryos/probes/contract/sigaltstack_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: tgkill
+  domain: signal
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 tgkill
+  tests:
+  - test-suit/starryos/probes/contract/tgkill_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: tkill
+  domain: signal
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 tkill
+  tests:
+  - test-suit/starryos/probes/contract/tkill_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getegid
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getegid
+  tests:
+  - test-suit/starryos/probes/contract/getegid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: geteuid
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 geteuid
+  tests:
+  - test-suit/starryos/probes/contract/geteuid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getgid
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getgid
+  tests:
+  - test-suit/starryos/probes/contract/getgid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getgroups
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getgroups
+  tests:
+  - test-suit/starryos/probes/contract/getgroups_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getrandom
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getrandom
+  tests:
+  - test-suit/starryos/probes/contract/getrandom_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getuid
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getuid
+  tests:
+  - test-suit/starryos/probes/contract/getuid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: setgid
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 setgid
+  tests:
+  - test-suit/starryos/probes/contract/setgid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: setgroups
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 setgroups
+  tests:
+  - test-suit/starryos/probes/contract/setgroups_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: setuid
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 setuid
+  tests:
+  - test-suit/starryos/probes/contract/setuid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: sysinfo
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 sysinfo
+  tests:
+  - test-suit/starryos/probes/contract/sysinfo_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: uname
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 uname
+  tests:
+  - test-suit/starryos/probes/contract/uname_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: times
+  domain: time
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 times
+  tests:
+  - test-suit/starryos/probes/contract/times_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getpgid
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getpgid
+  tests:
+  - test-suit/starryos/probes/contract/getpgid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: getsid
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 getsid
+  tests:
+  - test-suit/starryos/probes/contract/getsid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: setpgid
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 setpgid
+  tests:
+  - test-suit/starryos/probes/contract/setpgid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: setsid
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 setsid
+  tests:
+  - test-suit/starryos/probes/contract/setsid_linux_contract_p1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: clone
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 clone
+  tests:
+  - test-suit/starryos/probes/contract/clone_errno_probe.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: clone3
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 clone3
+  tests:
+  - test-suit/starryos/probes/contract/clone3_errno_probe.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: exit
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 exit
+  tests:
+  - test-suit/starryos/probes/contract/exit_smoke_v1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: exit_group
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 exit_group
+  tests:
+  - test-suit/starryos/probes/contract/exit_group_smoke_v1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: fork
+  domain: task
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/task/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 fork
+  tests:
+  - test-suit/starryos/probes/contract/fork_smoke_v1.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: rt_sigtimedwait
+  domain: signal
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 rt_sigtimedwait
+  tests:
+  - test-suit/starryos/probes/contract/rt_sigtimedwait_probe_tbd.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: signalfd4
+  domain: signal
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/fs/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 signalfd4
+  tests:
+  - test-suit/starryos/probes/contract/signalfd4_einval.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: riscv_flush_icache
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 riscv_flush_icache
+  tests:
+  - test-suit/starryos/probes/contract/riscv_flush_icache_einval.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: seccomp
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 seccomp
+  tests:
+  - test-suit/starryos/probes/contract/seccomp_einval.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: syslog
+  domain: sys
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 syslog
+  tests:
+  - test-suit/starryos/probes/contract/syslog_bad_type.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: membarrier
+  domain: sync
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/sync/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 membarrier
+  tests:
+  - test-suit/starryos/probes/contract/membarrier_einval.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: msgctl
+  domain: ipc
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/ipc/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 msgctl
+  tests:
+  - test-suit/starryos/probes/contract/msgctl_badid.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: msgget
+  domain: ipc
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/ipc/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 msgget
+  tests:
+  - test-suit/starryos/probes/contract/msgget_einval.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: msgrcv
+  domain: ipc
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/ipc/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 msgrcv
+  tests:
+  - test-suit/starryos/probes/contract/msgrcv_badid.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: msgsnd
+  domain: ipc
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/ipc/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 msgsnd
+  tests:
+  - test-suit/starryos/probes/contract/msgsnd_badid.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: shmat
+  domain: ipc
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/ipc/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 shmat
+  tests:
+  - test-suit/starryos/probes/contract/shmat_badid.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: shmctl
+  domain: ipc
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/ipc/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 shmctl
+  tests:
+  - test-suit/starryos/probes/contract/shmctl_badid.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: shmdt
+  domain: ipc
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/ipc/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 shmdt
+  tests:
+  - test-suit/starryos/probes/contract/shmdt_einval.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: shmget
+  domain: ipc
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/ipc/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 shmget
+  tests:
+  - test-suit/starryos/probes/contract/shmget_einval.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: bpf
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 bpf
+  tests:
+  - test-suit/starryos/probes/contract/bpf_stub_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: fanotify_init
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 fanotify_init
+  tests:
+  - test-suit/starryos/probes/contract/fanotify_init_stub_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: fsopen
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 fsopen
+  tests:
+  - test-suit/starryos/probes/contract/fsopen_stub_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: fspick
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 fspick
+  tests:
+  - test-suit/starryos/probes/contract/fspick_stub_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: inotify_init1
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 inotify_init1
+  tests:
+  - test-suit/starryos/probes/contract/inotify_init1_stub_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: io_uring_setup
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 io_uring_setup
+  tests:
+  - test-suit/starryos/probes/contract/io_uring_setup_stub_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: memfd_secret
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 memfd_secret
+  tests:
+  - test-suit/starryos/probes/contract/memfd_secret_stub_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: open_tree
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 open_tree
+  tests:
+  - test-suit/starryos/probes/contract/open_tree_stub_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: perf_event_open
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 perf_event_open
+  tests:
+  - test-suit/starryos/probes/contract/perf_event_open_stub_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: timer_create
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 timer_create
+  tests:
+  - test-suit/starryos/probes/contract/timer_create_noop_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: timer_gettime
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 timer_gettime
+  tests:
+  - test-suit/starryos/probes/contract/timer_gettime_noop_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: timer_settime
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 timer_settime
+  tests:
+  - test-suit/starryos/probes/contract/timer_settime_noop_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: timerfd_create
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 timerfd_create
+  tests:
+  - test-suit/starryos/probes/contract/timerfd_create_stub_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno
+- syscall: userfaultfd
+  domain: fs
+  dispatch_path: os/StarryOS/kernel/src/syscall/mod.rs
+  impl_path: os/StarryOS/kernel/src/syscall/
+  status: partial
+  semantic_class: contract_batch
+  boundary_profiles:
+  - contract_probe
+  core_modes:
+  - smp1
+  - smp2
+  linux_refs:
+  - man 2 userfaultfd
+  tests:
+  - test-suit/starryos/probes/contract/userfaultfd_stub_semantics.c
+  risk_tags:
+  - errno_mismatch
+  generator_hints:
+    template: contract_errno

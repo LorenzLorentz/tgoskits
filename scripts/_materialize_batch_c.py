@@ -189,7 +189,7 @@ int main(void)
 int main(void)
 {
 	errno = 0;
-	int r = mlock((void *)0x10000, 4096);
+	int r = mlock(NULL, 4096);
 	int e = errno;
 	dprintf(1, "CASE mlock.enomem ret=%d errno=%d note=handwritten\n", r, e);
 	return 0;
@@ -212,6 +212,103 @@ int main(void)
 	int e = errno;
 	dprintf(1, "CASE mlock2.einval ret=%ld errno=%d note=handwritten\n", r, e);
 	munmap(p, 4096);
+	return 0;
+}
+""",
+    "eventfd2_einval": r"""
+#include <errno.h>
+#include <stdio.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+int main(void)
+{
+	errno = 0;
+	int r = (int)syscall(SYS_eventfd2, 0, -1);
+	int e = errno;
+	dprintf(1, "CASE eventfd2.einval ret=%d errno=%d note=handwritten\n", r, e);
+	return 0;
+}
+""",
+    "memfd_create_einval": r"""
+#include <errno.h>
+#include <stdio.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+int main(void)
+{
+	errno = 0;
+	int r = (int)syscall(SYS_memfd_create, "x", -1);
+	int e = errno;
+	dprintf(1, "CASE memfd_create.einval ret=%d errno=%d note=handwritten\n", r, e);
+	return 0;
+}
+""",
+    "pidfd_open_esrch": r"""
+#include <errno.h>
+#include <stdio.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+int main(void)
+{
+	errno = 0;
+	int r = (int)syscall(SYS_pidfd_open, 999999999, 0);
+	int e = errno;
+	dprintf(1, "CASE pidfd_open.esrch ret=%d errno=%d note=handwritten\n", r, e);
+	return 0;
+}
+""",
+    "pipe_linux_contract_p1": r"""
+#include <errno.h>
+#include <stdio.h>
+#include <unistd.h>
+int main(void)
+{
+	int fd[2];
+	errno = 0;
+	int r = pipe2(fd, -1);
+	int e = errno;
+	dprintf(1, "CASE pipe.linux_contract_p1 ret=%d errno=%d note=handwritten\n", r, e);
+	return 0;
+}
+""",
+    "recvmsg_badfd": r"""
+#include <errno.h>
+#include <stdio.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+int main(void)
+{
+	errno = 0;
+	long r = syscall(SYS_recvmsg, -1, (void *)0, 0);
+	int e = errno;
+	dprintf(1, "CASE recvmsg.badfd ret=%ld errno=%d note=handwritten\n", r, e);
+	return 0;
+}
+""",
+    "socket_invalid_domain": r"""
+#include <errno.h>
+#include <stdio.h>
+#include <sys/socket.h>
+int main(void)
+{
+	errno = 0;
+	int r = socket(12345, SOCK_STREAM, 0);
+	int e = errno;
+	dprintf(1, "CASE socket.invalid_domain ret=%d errno=%d note=handwritten\n", r, e);
+	return 0;
+}
+""",
+    "socketpair_einval": r"""
+#include <errno.h>
+#include <stdio.h>
+#include <sys/socket.h>
+int main(void)
+{
+	int sv[2];
+	errno = 0;
+	int r = socketpair(AF_INET, -1, 0, sv);
+	int e = errno;
+	dprintf(1, "CASE socketpair.einval ret=%d errno=%d note=handwritten\n", r, e);
 	return 0;
 }
 """,

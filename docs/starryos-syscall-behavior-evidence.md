@@ -85,26 +85,26 @@
 | `epoll_ctl` | `sys_epoll_ctl` | partial | epoll_ctl_badfd | epoll_ctl_badfd |
 | `epoll_pwait` | `sys_epoll_pwait` | partial | epoll_pwait_badfd | epoll_pwait_badfd |
 | `epoll_pwait2` | `sys_epoll_pwait2` | partial | epoll_pwait2_badfd | epoll_pwait2_badfd |
-| `mount` | `sys_mount` | not_applicable | (planned) mount_enoent | — |
-| `umount2` | `sys_umount2` | not_applicable | (planned) umount2_enoent | — |
+| `mount` | `sys_mount` | partial | mount_enoent | mount_enoent |
+| `umount2` | `sys_umount2` | partial | umount2_enoent | umount2_enoent |
 | `pipe2` | `sys_pipe2` | partial | pipe2_nullfd | pipe2_nullfd |
-| `pipe` | `sys_pipe2` | not_applicable | (planned) pipe_linux_contract_p1 | — |
-| `eventfd2` | `sys_eventfd2` | not_applicable | (planned) eventfd2_einval | — |
-| `pidfd_open` | `sys_pidfd_open` | not_applicable | (planned) pidfd_open_esrch | — |
-| `pidfd_getfd` | `sys_pidfd_getfd` | not_applicable | (planned) pidfd_getfd_badfd | — |
-| `pidfd_send_signal` | `sys_pidfd_send_signal` | not_applicable | (planned) pidfd_send_signal_badfd | — |
-| `memfd_create` | `sys_memfd_create` | not_applicable | (planned) memfd_create_einval | — |
-| `stat` | `sys_stat` | not_applicable | (planned) stat_enoent | — |
-| `fstat` | `sys_fstat` | not_applicable | (planned) fstat_badfd | — |
-| `lstat` | `sys_lstat` | not_applicable | (planned) lstat_enoent | — |
-| `newfstatat` | `sys_fstatat` | not_applicable | (planned) newfstatat_enoent | — |
-| `fstatat` | `sys_fstatat` | not_applicable | (planned) fstatat_enoent | — |
-| `statx` | `sys_statx` | not_applicable | (planned) statx_enoent | — |
-| `access` | `sys_access` | not_applicable | (planned) access_enoent | — |
-| `faccessat` | `sys_faccessat2` | not_applicable | (planned) faccessat_enoent | — |
-| `faccessat2` | `sys_faccessat2` | not_applicable | (planned) faccessat2_enoent | — |
-| `statfs` | `sys_statfs` | not_applicable | (planned) statfs_linux_contract_p1 | — |
-| `fstatfs` | `sys_fstatfs` | not_applicable | (planned) fstatfs_badfd | — |
+| `pipe` | `sys_pipe2` | partial | pipe_linux_contract_p1 | pipe_linux_contract_p1 |
+| `eventfd2` | `sys_eventfd2` | partial | eventfd2_einval | eventfd2_einval |
+| `pidfd_open` | `sys_pidfd_open` | partial | pidfd_open_esrch | pidfd_open_esrch |
+| `pidfd_getfd` | `sys_pidfd_getfd` | partial | pidfd_getfd_badfd | pidfd_getfd_badfd |
+| `pidfd_send_signal` | `sys_pidfd_send_signal` | partial | pidfd_send_signal_badfd | pidfd_send_signal_badfd |
+| `memfd_create` | `sys_memfd_create` | partial | memfd_create_einval | memfd_create_einval |
+| `stat` | `sys_stat` | partial | stat_enoent | stat_enoent |
+| `fstat` | `sys_fstat` | partial | fstat_badfd | fstat_badfd |
+| `lstat` | `sys_lstat` | partial | lstat_enoent | lstat_enoent |
+| `newfstatat` | `sys_fstatat` | partial | newfstatat_enoent | newfstatat_enoent |
+| `fstatat` | `sys_fstatat` | partial | fstatat_enoent | fstatat_enoent |
+| `statx` | `sys_statx` | partial | statx_enoent | statx_enoent |
+| `access` | `sys_access` | partial | access_enoent | access_enoent |
+| `faccessat` | `sys_faccessat2` | partial | faccessat_enoent | faccessat_enoent |
+| `faccessat2` | `sys_faccessat2` | partial | faccessat2_enoent | faccessat2_enoent |
+| `statfs` | `sys_statfs` | partial | statfs_linux_contract_p1 | statfs_linux_contract_p1 |
+| `fstatfs` | `sys_fstatfs` | partial | fstatfs_badfd | fstatfs_badfd |
 | `brk` | `sys_brk` | partial | brk_increment_smoke | brk_increment_smoke |
 | `mmap` | `sys_mmap` | partial | mmap_nonanon_badfd | mmap_nonanon_badfd |
 | `munmap` | `sys_munmap` | partial | munmap_einval | munmap_einval |
@@ -115,116 +115,116 @@
 | `msync` | `sys_msync` | partial | msync_einval | msync_einval |
 | `mlock` | `sys_mlock` | partial | mlock_enomem | mlock_enomem |
 | `mlock2` | `sys_mlock2` | partial | mlock2_einval | mlock2_einval |
-| `getpid` | `sys_getpid` | not_applicable | (planned) getpid_linux_contract_p1 | — |
-| `getppid` | `sys_getppid` | not_applicable | (planned) getppid_linux_contract_p1 | — |
-| `gettid` | `sys_gettid` | not_applicable | (planned) gettid_linux_contract_p1 | — |
-| `getrusage` | `sys_getrusage` | not_applicable | (planned) getrusage_linux_contract_p1 | — |
-| `sched_yield` | `sys_sched_yield` | not_applicable | (planned) sched_yield_linux_contract_p1 | — |
-| `nanosleep` | `sys_nanosleep` | not_applicable | (planned) nanosleep_linux_contract_p1 | — |
-| `clock_nanosleep` | `sys_clock_nanosleep` | not_applicable | (planned) clock_nanosleep_linux_contract_p1 | — |
-| `sched_getaffinity` | `sys_sched_getaffinity` | not_applicable | (planned) sched_getaffinity_null_ptr_efault | — |
-| `sched_setaffinity` | `sys_sched_setaffinity` | not_applicable | (planned) sched_setaffinity_null_ptr_efault | — |
-| `sched_getscheduler` | `sys_sched_getscheduler` | not_applicable | (planned) sched_getscheduler_linux_contract_p1 | — |
-| `sched_setscheduler` | `sys_sched_setscheduler` | not_applicable | (planned) sched_setscheduler_linux_contract_p1 | — |
-| `sched_getparam` | `sys_sched_getparam` | not_applicable | (planned) sched_getparam_linux_contract_p1 | — |
-| `getpriority` | `sys_getpriority` | not_applicable | (planned) getpriority_linux_contract_p1 | — |
+| `getpid` | `sys_getpid` | partial | getpid_linux_contract_p1 | getpid_linux_contract_p1 |
+| `getppid` | `sys_getppid` | partial | getppid_linux_contract_p1 | getppid_linux_contract_p1 |
+| `gettid` | `sys_gettid` | partial | gettid_linux_contract_p1 | gettid_linux_contract_p1 |
+| `getrusage` | `sys_getrusage` | partial | getrusage_linux_contract_p1 | getrusage_linux_contract_p1 |
+| `sched_yield` | `sys_sched_yield` | partial | sched_yield_linux_contract_p1 | sched_yield_linux_contract_p1 |
+| `nanosleep` | `sys_nanosleep` | partial | nanosleep_linux_contract_p1 | nanosleep_linux_contract_p1 |
+| `clock_nanosleep` | `sys_clock_nanosleep` | partial | clock_nanosleep_linux_contract_p1 | clock_nanosleep_linux_contract_p1 |
+| `sched_getaffinity` | `sys_sched_getaffinity` | partial | sched_getaffinity_null_ptr_efault | sched_getaffinity_null_ptr_efault |
+| `sched_setaffinity` | `sys_sched_setaffinity` | partial | sched_setaffinity_null_ptr_efault | sched_setaffinity_null_ptr_efault |
+| `sched_getscheduler` | `sys_sched_getscheduler` | partial | sched_getscheduler_linux_contract_p1 | sched_getscheduler_linux_contract_p1 |
+| `sched_setscheduler` | `sys_sched_setscheduler` | partial | sched_setscheduler_linux_contract_p1 | sched_setscheduler_linux_contract_p1 |
+| `sched_getparam` | `sys_sched_getparam` | partial | sched_getparam_linux_contract_p1 | sched_getparam_linux_contract_p1 |
+| `getpriority` | `sys_getpriority` | partial | getpriority_linux_contract_p1 | getpriority_linux_contract_p1 |
 | `execve` | `sys_execve` | partial | execve_enoent | execve_enoent |
-| `set_tid_address` | `sys_set_tid_address` | not_applicable | (planned) set_tid_address_linux_contract_p1 | — |
+| `set_tid_address` | `sys_set_tid_address` | partial | set_tid_address_linux_contract_p1 | set_tid_address_linux_contract_p1 |
 | `arch_prctl` | `sys_arch_prctl` | not_applicable | (planned) arch_prctl_linux_contract_p1 | — |
-| `prctl` | `sys_prctl` | not_applicable | (planned) prctl_linux_contract_p1 | — |
-| `prlimit64` | `sys_prlimit64` | not_applicable | (planned) prlimit64_linux_contract_p1 | — |
-| `capget` | `sys_capget` | not_applicable | (planned) capget_linux_contract_p1 | — |
-| `capset` | `sys_capset` | not_applicable | (planned) capset_linux_contract_p1 | — |
-| `umask` | `sys_umask` | not_applicable | (planned) umask_linux_contract_p1 | — |
-| `setreuid` | `sys_setreuid` | not_applicable | (planned) setreuid_linux_contract_p1 | — |
-| `setresuid` | `sys_setresuid` | not_applicable | (planned) setresuid_linux_contract_p1 | — |
-| `setresgid` | `sys_setresgid` | not_applicable | (planned) setresgid_linux_contract_p1 | — |
-| `get_mempolicy` | `sys_get_mempolicy` | not_applicable | (planned) get_mempolicy_linux_contract_p1 | — |
-| `clone` | `sys_clone` | not_applicable | (planned) clone_errno_probe | — |
-| `clone3` | `sys_clone3` | not_applicable | (planned) clone3_errno_probe | — |
-| `fork` | `sys_fork` | not_applicable | (planned) fork_smoke_v1 | — |
-| `exit` | `sys_exit` | not_applicable | (planned) exit_smoke_v1 | — |
-| `exit_group` | `sys_exit_group` | not_applicable | (planned) exit_group_smoke_v1 | — |
+| `prctl` | `sys_prctl` | partial | prctl_linux_contract_p1 | prctl_linux_contract_p1 |
+| `prlimit64` | `sys_prlimit64` | partial | prlimit64_linux_contract_p1 | prlimit64_linux_contract_p1 |
+| `capget` | `sys_capget` | partial | capget_linux_contract_p1 | capget_linux_contract_p1 |
+| `capset` | `sys_capset` | partial | capset_linux_contract_p1 | capset_linux_contract_p1 |
+| `umask` | `sys_umask` | partial | umask_linux_contract_p1 | umask_linux_contract_p1 |
+| `setreuid` | `sys_setreuid` | partial | setreuid_linux_contract_p1 | setreuid_linux_contract_p1 |
+| `setresuid` | `sys_setresuid` | partial | setresuid_linux_contract_p1 | setresuid_linux_contract_p1 |
+| `setresgid` | `sys_setresgid` | partial | setresgid_linux_contract_p1 | setresgid_linux_contract_p1 |
+| `get_mempolicy` | `sys_get_mempolicy` | partial | get_mempolicy_linux_contract_p1 | get_mempolicy_linux_contract_p1 |
+| `clone` | `sys_clone` | partial | clone_errno_probe | clone_errno_probe |
+| `clone3` | `sys_clone3` | partial | clone3_errno_probe | clone3_errno_probe |
+| `fork` | `sys_fork` | partial | fork_smoke_v1 | fork_smoke_v1 |
+| `exit` | `sys_exit` | partial | exit_smoke_v1 | exit_smoke_v1 |
+| `exit_group` | `sys_exit_group` | partial | exit_group_smoke_v1 | exit_group_smoke_v1 |
 | `wait4` | `sys_waitpid` | partial | wait4_echild | wait4_echild |
-| `getsid` | `sys_getsid` | not_applicable | (planned) getsid_linux_contract_p1 | — |
-| `setsid` | `sys_setsid` | not_applicable | (planned) setsid_linux_contract_p1 | — |
-| `getpgid` | `sys_getpgid` | not_applicable | (planned) getpgid_linux_contract_p1 | — |
-| `setpgid` | `sys_setpgid` | not_applicable | (planned) setpgid_linux_contract_p1 | — |
-| `rt_sigprocmask` | `sys_rt_sigprocmask` | not_applicable | (planned) rt_sigprocmask_linux_contract_p1 | — |
-| `rt_sigaction` | `sys_rt_sigaction` | not_applicable | (planned) rt_sigaction_linux_contract_p1 | — |
-| `rt_sigpending` | `sys_rt_sigpending` | not_applicable | (planned) rt_sigpending_linux_contract_p1 | — |
+| `getsid` | `sys_getsid` | partial | getsid_linux_contract_p1 | getsid_linux_contract_p1 |
+| `setsid` | `sys_setsid` | partial | setsid_linux_contract_p1 | setsid_linux_contract_p1 |
+| `getpgid` | `sys_getpgid` | partial | getpgid_linux_contract_p1 | getpgid_linux_contract_p1 |
+| `setpgid` | `sys_setpgid` | partial | setpgid_linux_contract_p1 | setpgid_linux_contract_p1 |
+| `rt_sigprocmask` | `sys_rt_sigprocmask` | partial | rt_sigprocmask_linux_contract_p1 | rt_sigprocmask_linux_contract_p1 |
+| `rt_sigaction` | `sys_rt_sigaction` | partial | rt_sigaction_linux_contract_p1 | rt_sigaction_linux_contract_p1 |
+| `rt_sigpending` | `sys_rt_sigpending` | partial | rt_sigpending_linux_contract_p1 | rt_sigpending_linux_contract_p1 |
 | `rt_sigreturn` | `sys_rt_sigreturn` | not_applicable | (planned) rt_sigreturn_probe_tbd | — |
-| `rt_sigtimedwait` | `sys_rt_sigtimedwait` | not_applicable | (planned) rt_sigtimedwait_probe_tbd | — |
+| `rt_sigtimedwait` | `sys_rt_sigtimedwait` | partial | rt_sigtimedwait_probe_tbd | rt_sigtimedwait_probe_tbd |
 | `rt_sigsuspend` | `sys_rt_sigsuspend` | not_applicable | (planned) rt_sigsuspend_probe_tbd | — |
-| `kill` | `sys_kill` | not_applicable | (planned) kill_linux_contract_p1 | — |
-| `tkill` | `sys_tkill` | not_applicable | (planned) tkill_linux_contract_p1 | — |
-| `tgkill` | `sys_tgkill` | not_applicable | (planned) tgkill_linux_contract_p1 | — |
-| `rt_sigqueueinfo` | `sys_rt_sigqueueinfo` | not_applicable | (planned) rt_sigqueueinfo_linux_contract_p1 | — |
-| `rt_tgsigqueueinfo` | `sys_rt_tgsigqueueinfo` | not_applicable | (planned) rt_tgsigqueueinfo_linux_contract_p1 | — |
-| `sigaltstack` | `sys_sigaltstack` | not_applicable | (planned) sigaltstack_linux_contract_p1 | — |
+| `kill` | `sys_kill` | partial | kill_linux_contract_p1 | kill_linux_contract_p1 |
+| `tkill` | `sys_tkill` | partial | tkill_linux_contract_p1 | tkill_linux_contract_p1 |
+| `tgkill` | `sys_tgkill` | partial | tgkill_linux_contract_p1 | tgkill_linux_contract_p1 |
+| `rt_sigqueueinfo` | `sys_rt_sigqueueinfo` | partial | rt_sigqueueinfo_linux_contract_p1 | rt_sigqueueinfo_linux_contract_p1 |
+| `rt_tgsigqueueinfo` | `sys_rt_tgsigqueueinfo` | partial | rt_tgsigqueueinfo_linux_contract_p1 | rt_tgsigqueueinfo_linux_contract_p1 |
+| `sigaltstack` | `sys_sigaltstack` | partial | sigaltstack_linux_contract_p1 | sigaltstack_linux_contract_p1 |
 | `futex` | `sys_futex` | partial | futex_wake_nop | futex_wake_nop |
-| `get_robust_list` | `sys_get_robust_list` | not_applicable | (planned) get_robust_list_linux_contract_p1 | — |
-| `set_robust_list` | `sys_set_robust_list` | not_applicable | (planned) set_robust_list_linux_contract_p1 | — |
-| `getuid` | `sys_getuid` | not_applicable | (planned) getuid_linux_contract_p1 | — |
-| `geteuid` | `sys_geteuid` | not_applicable | (planned) geteuid_linux_contract_p1 | — |
-| `getgid` | `sys_getgid` | not_applicable | (planned) getgid_linux_contract_p1 | — |
-| `getegid` | `sys_getegid` | not_applicable | (planned) getegid_linux_contract_p1 | — |
-| `setuid` | `sys_setuid` | not_applicable | (planned) setuid_linux_contract_p1 | — |
-| `setgid` | `sys_setgid` | not_applicable | (planned) setgid_linux_contract_p1 | — |
-| `getgroups` | `sys_getgroups` | not_applicable | (planned) getgroups_linux_contract_p1 | — |
-| `setgroups` | `sys_setgroups` | not_applicable | (planned) setgroups_linux_contract_p1 | — |
-| `uname` | `sys_uname` | not_applicable | (planned) uname_linux_contract_p1 | — |
-| `sysinfo` | `sys_sysinfo` | not_applicable | (planned) sysinfo_linux_contract_p1 | — |
-| `syslog` | `sys_syslog` | not_applicable | (planned) syslog_bad_type | — |
-| `getrandom` | `sys_getrandom` | not_applicable | (planned) getrandom_linux_contract_p1 | — |
-| `seccomp` | `sys_seccomp` | not_applicable | (planned) seccomp_einval | — |
-| `riscv_flush_icache` | `sys_riscv_flush_icache` | not_applicable | (planned) riscv_flush_icache_einval | — |
-| `membarrier` | `sys_membarrier` | not_applicable | (planned) membarrier_einval | — |
-| `gettimeofday` | `sys_gettimeofday` | not_applicable | (planned) gettimeofday_null_ptr_efault | — |
-| `times` | `sys_times` | not_applicable | (planned) times_linux_contract_p1 | — |
+| `get_robust_list` | `sys_get_robust_list` | partial | get_robust_list_linux_contract_p1 | get_robust_list_linux_contract_p1 |
+| `set_robust_list` | `sys_set_robust_list` | partial | set_robust_list_linux_contract_p1 | set_robust_list_linux_contract_p1 |
+| `getuid` | `sys_getuid` | partial | getuid_linux_contract_p1 | getuid_linux_contract_p1 |
+| `geteuid` | `sys_geteuid` | partial | geteuid_linux_contract_p1 | geteuid_linux_contract_p1 |
+| `getgid` | `sys_getgid` | partial | getgid_linux_contract_p1 | getgid_linux_contract_p1 |
+| `getegid` | `sys_getegid` | partial | getegid_linux_contract_p1 | getegid_linux_contract_p1 |
+| `setuid` | `sys_setuid` | partial | setuid_linux_contract_p1 | setuid_linux_contract_p1 |
+| `setgid` | `sys_setgid` | partial | setgid_linux_contract_p1 | setgid_linux_contract_p1 |
+| `getgroups` | `sys_getgroups` | partial | getgroups_linux_contract_p1 | getgroups_linux_contract_p1 |
+| `setgroups` | `sys_setgroups` | partial | setgroups_linux_contract_p1 | setgroups_linux_contract_p1 |
+| `uname` | `sys_uname` | partial | uname_linux_contract_p1 | uname_linux_contract_p1 |
+| `sysinfo` | `sys_sysinfo` | partial | sysinfo_linux_contract_p1 | sysinfo_linux_contract_p1 |
+| `syslog` | `sys_syslog` | partial | syslog_bad_type | syslog_bad_type |
+| `getrandom` | `sys_getrandom` | partial | getrandom_linux_contract_p1 | getrandom_linux_contract_p1 |
+| `seccomp` | `sys_seccomp` | partial | seccomp_einval | seccomp_einval |
+| `riscv_flush_icache` | `sys_riscv_flush_icache` | partial | riscv_flush_icache_einval | riscv_flush_icache_einval |
+| `membarrier` | `sys_membarrier` | partial | membarrier_einval | membarrier_einval |
+| `gettimeofday` | `sys_gettimeofday` | partial | gettimeofday_null_ptr_efault | gettimeofday_null_ptr_efault |
+| `times` | `sys_times` | partial | times_linux_contract_p1 | times_linux_contract_p1 |
 | `clock_gettime` | `sys_clock_gettime` | partial | clock_gettime_null_ts | clock_gettime_null_ts |
-| `clock_getres` | `sys_clock_getres` | not_applicable | (planned) clock_getres_null_ptr_efault | — |
-| `getitimer` | `sys_getitimer` | not_applicable | (planned) getitimer_null_ptr_efault | — |
-| `setitimer` | `sys_setitimer` | not_applicable | (planned) setitimer_null_ptr_efault | — |
-| `msgget` | `sys_msgget` | not_applicable | (planned) msgget_einval | — |
-| `msgsnd` | `sys_msgsnd` | not_applicable | (planned) msgsnd_badid | — |
-| `msgrcv` | `sys_msgrcv` | not_applicable | (planned) msgrcv_badid | — |
-| `msgctl` | `sys_msgctl` | not_applicable | (planned) msgctl_badid | — |
-| `shmget` | `sys_shmget` | not_applicable | (planned) shmget_einval | — |
-| `shmat` | `sys_shmat` | not_applicable | (planned) shmat_badid | — |
-| `shmctl` | `sys_shmctl` | not_applicable | (planned) shmctl_badid | — |
-| `shmdt` | `sys_shmdt` | not_applicable | (planned) shmdt_einval | — |
-| `socket` | `sys_socket` | not_applicable | (planned) socket_invalid_domain | — |
-| `socketpair` | `sys_socketpair` | not_applicable | (planned) socketpair_einval | — |
-| `bind` | `sys_bind` | not_applicable | (planned) bind_badfd | — |
-| `connect` | `sys_connect` | not_applicable | (planned) connect_badfd | — |
-| `getsockname` | `sys_getsockname` | not_applicable | (planned) getsockname_badfd | — |
-| `getpeername` | `sys_getpeername` | not_applicable | (planned) getpeername_badfd | — |
-| `listen` | `sys_listen` | not_applicable | (planned) listen_badfd | — |
-| `accept` | `sys_accept` | not_applicable | (planned) accept_badfd | — |
-| `accept4` | `sys_accept4` | not_applicable | (planned) accept4_badfd | — |
-| `shutdown` | `sys_shutdown` | not_applicable | (planned) shutdown_badfd | — |
-| `sendto` | `sys_sendto` | not_applicable | (planned) sendto_badfd | — |
-| `recvfrom` | `sys_recvfrom` | not_applicable | (planned) recvfrom_badfd | — |
-| `sendmsg` | `sys_sendmsg` | not_applicable | (planned) sendmsg_badfd | — |
-| `recvmsg` | `sys_recvmsg` | not_applicable | (planned) recvmsg_badfd | — |
-| `getsockopt` | `sys_getsockopt` | not_applicable | (planned) getsockopt_badfd | — |
-| `setsockopt` | `sys_setsockopt` | not_applicable | (planned) setsockopt_badfd | — |
-| `signalfd4` | `sys_signalfd4` | not_applicable | (planned) signalfd4_einval | — |
-| `timerfd_create` | `sys_dummy_fd` | not_applicable | (planned) timerfd_create_stub_semantics | — |
-| `fanotify_init` | `sys_dummy_fd` | not_applicable | (planned) fanotify_init_stub_semantics | — |
-| `inotify_init1` | `sys_dummy_fd` | not_applicable | (planned) inotify_init1_stub_semantics | — |
-| `userfaultfd` | `sys_dummy_fd` | not_applicable | (planned) userfaultfd_stub_semantics | — |
-| `perf_event_open` | `sys_dummy_fd` | not_applicable | (planned) perf_event_open_stub_semantics | — |
-| `io_uring_setup` | `sys_dummy_fd` | not_applicable | (planned) io_uring_setup_stub_semantics | — |
-| `bpf` | `sys_dummy_fd` | not_applicable | (planned) bpf_stub_semantics | — |
-| `fsopen` | `sys_dummy_fd` | not_applicable | (planned) fsopen_stub_semantics | — |
-| `fspick` | `sys_dummy_fd` | not_applicable | (planned) fspick_stub_semantics | — |
-| `open_tree` | `sys_dummy_fd` | not_applicable | (planned) open_tree_stub_semantics | — |
-| `memfd_secret` | `sys_dummy_fd` | not_applicable | (planned) memfd_secret_stub_semantics | — |
-| `timer_create` | `Ok(0)` | not_applicable | (planned) timer_create_noop_semantics | — |
-| `timer_gettime` | `Ok(0)` | not_applicable | (planned) timer_gettime_noop_semantics | — |
-| `timer_settime` | `Ok(0)` | not_applicable | (planned) timer_settime_noop_semantics | — |
+| `clock_getres` | `sys_clock_getres` | partial | clock_getres_null_ptr_efault | clock_getres_null_ptr_efault |
+| `getitimer` | `sys_getitimer` | partial | getitimer_null_ptr_efault | getitimer_null_ptr_efault |
+| `setitimer` | `sys_setitimer` | partial | setitimer_null_ptr_efault | setitimer_null_ptr_efault |
+| `msgget` | `sys_msgget` | partial | msgget_einval | msgget_einval |
+| `msgsnd` | `sys_msgsnd` | partial | msgsnd_badid | msgsnd_badid |
+| `msgrcv` | `sys_msgrcv` | partial | msgrcv_badid | msgrcv_badid |
+| `msgctl` | `sys_msgctl` | partial | msgctl_badid | msgctl_badid |
+| `shmget` | `sys_shmget` | partial | shmget_einval | shmget_einval |
+| `shmat` | `sys_shmat` | partial | shmat_badid | shmat_badid |
+| `shmctl` | `sys_shmctl` | partial | shmctl_badid | shmctl_badid |
+| `shmdt` | `sys_shmdt` | partial | shmdt_einval | shmdt_einval |
+| `socket` | `sys_socket` | partial | socket_invalid_domain | socket_invalid_domain |
+| `socketpair` | `sys_socketpair` | partial | socketpair_einval | socketpair_einval |
+| `bind` | `sys_bind` | partial | bind_badfd | bind_badfd |
+| `connect` | `sys_connect` | partial | connect_badfd | connect_badfd |
+| `getsockname` | `sys_getsockname` | partial | getsockname_badfd | getsockname_badfd |
+| `getpeername` | `sys_getpeername` | partial | getpeername_badfd | getpeername_badfd |
+| `listen` | `sys_listen` | partial | listen_badfd | listen_badfd |
+| `accept` | `sys_accept` | partial | accept_badfd | accept_badfd |
+| `accept4` | `sys_accept4` | partial | accept4_badfd | accept4_badfd |
+| `shutdown` | `sys_shutdown` | partial | shutdown_badfd | shutdown_badfd |
+| `sendto` | `sys_sendto` | partial | sendto_badfd | sendto_badfd |
+| `recvfrom` | `sys_recvfrom` | partial | recvfrom_badfd | recvfrom_badfd |
+| `sendmsg` | `sys_sendmsg` | partial | sendmsg_badfd | sendmsg_badfd |
+| `recvmsg` | `sys_recvmsg` | partial | recvmsg_badfd | recvmsg_badfd |
+| `getsockopt` | `sys_getsockopt` | partial | getsockopt_badfd | getsockopt_badfd |
+| `setsockopt` | `sys_setsockopt` | partial | setsockopt_badfd | setsockopt_badfd |
+| `signalfd4` | `sys_signalfd4` | partial | signalfd4_einval | signalfd4_einval |
+| `timerfd_create` | `sys_dummy_fd` | partial | timerfd_create_stub_semantics | timerfd_create_stub_semantics |
+| `fanotify_init` | `sys_dummy_fd` | partial | fanotify_init_stub_semantics | fanotify_init_stub_semantics |
+| `inotify_init1` | `sys_dummy_fd` | partial | inotify_init1_stub_semantics | inotify_init1_stub_semantics |
+| `userfaultfd` | `sys_dummy_fd` | partial | userfaultfd_stub_semantics | userfaultfd_stub_semantics |
+| `perf_event_open` | `sys_dummy_fd` | partial | perf_event_open_stub_semantics | perf_event_open_stub_semantics |
+| `io_uring_setup` | `sys_dummy_fd` | partial | io_uring_setup_stub_semantics | io_uring_setup_stub_semantics |
+| `bpf` | `sys_dummy_fd` | partial | bpf_stub_semantics | bpf_stub_semantics |
+| `fsopen` | `sys_dummy_fd` | partial | fsopen_stub_semantics | fsopen_stub_semantics |
+| `fspick` | `sys_dummy_fd` | partial | fspick_stub_semantics | fspick_stub_semantics |
+| `open_tree` | `sys_dummy_fd` | partial | open_tree_stub_semantics | open_tree_stub_semantics |
+| `memfd_secret` | `sys_dummy_fd` | partial | memfd_secret_stub_semantics | memfd_secret_stub_semantics |
+| `timer_create` | `Ok(0)` | partial | timer_create_noop_semantics | timer_create_noop_semantics |
+| `timer_gettime` | `Ok(0)` | partial | timer_gettime_noop_semantics | timer_gettime_noop_semantics |
+| `timer_settime` | `Ok(0)` | partial | timer_settime_noop_semantics | timer_settime_noop_semantics |
 
 ## 兼容矩阵中有、但不在分发表 JSON 中的条目
 

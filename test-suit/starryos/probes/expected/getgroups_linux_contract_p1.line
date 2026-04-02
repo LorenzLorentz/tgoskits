@@ -1,0 +1,1 @@
+CASE getgroups_linux_contract.p1 ret=13 errno=0 note=tbd_p1

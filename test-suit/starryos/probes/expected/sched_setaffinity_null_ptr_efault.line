@@ -1,0 +1,1 @@
+CASE sched_setaffinity.null_mask ret=-1 errno=14 note=handwritten

@@ -1,0 +1,1 @@
+CASE timerfd_create_stub.semantics ret=-1 errno=22 note=handwritten

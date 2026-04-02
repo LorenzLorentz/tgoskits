@@ -93,8 +93,8 @@ batches:
     section: fs stat
   - syscall: statfs
     planned_contract_probe: statfs_linux_contract_p1
-    suggested_case: pick minimal errno oracle case per man 2
-    probe_pattern: tbd_errno
+    suggested_case: missing abs path -> ENOENT (errno=2)
+    probe_pattern: errno_enoent_path
     handler: sys_statfs
     section: fs stat
   - syscall: statx
@@ -145,8 +145,8 @@ batches:
     section: pidfd
   - syscall: pipe
     planned_contract_probe: pipe_linux_contract_p1
-    suggested_case: pick minimal errno oracle case per man 2
-    probe_pattern: tbd_errno
+    suggested_case: pipe2(fd, -1) -> EINVAL (errno=22)
+    probe_pattern: special
     handler: sys_pipe2
     section: pipe
   - syscall: umount2
@@ -666,13 +666,13 @@ batches:
   - syscall: bind
     planned_contract_probe: bind_badfd
     suggested_case: sockfd=-1 -> EBADF
-    probe_pattern: special
+    probe_pattern: errno_badfd
     handler: sys_bind
     section: net
   - syscall: connect
     planned_contract_probe: connect_badfd
     suggested_case: sockfd=-1 -> EBADF
-    probe_pattern: special
+    probe_pattern: errno_badfd
     handler: sys_connect
     section: net
   - syscall: getpeername

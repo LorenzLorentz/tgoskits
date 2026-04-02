@@ -1,0 +1,1 @@
+CASE riscv_flush_icache.einval ret=0 errno=0 note=handwritten

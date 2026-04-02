@@ -1,0 +1,1 @@
+CASE syslog.bad_type ret=-1 errno=22 note=handwritten

@@ -1,0 +1,1 @@
+CASE pidfd_open.esrch ret=-1 errno=3 note=handwritten

@@ -32,6 +32,8 @@ except ImportError:
 
 from _materialize_badfd import BADFD_STMT
 from _materialize_batch_c import EXTRA_C
+from _materialize_remaining_probes import EXTRA_C_REMAINING
+from _materialize_tbd_p1 import tbd_p1_source
 
 
 def case_tag(probe: str) -> str:
@@ -262,6 +264,14 @@ def build_source_for_entry(syscall: str, probe: str, pattern: str) -> str | None
     if probe in EXTRA_C:
         return EXTRA_C[probe].strip() + "\n"
 
+    if probe in EXTRA_C_REMAINING:
+        return EXTRA_C_REMAINING[probe].strip() + "\n"
+
+    if pattern == "tbd_errno":
+        tbd = tbd_p1_source(syscall, probe)
+        if tbd is not None:
+            return tbd
+
     # ---- explicit probes (oracle differs from suffix heuristic) ----
     if probe == "close_range_badfd":
         body = """
@@ -360,8 +370,8 @@ int main(void)
         "lstat": (["errno.h", "stdio.h", "sys/stat.h"], "struct stat st; int r = lstat(p, &st);"),
         "truncate": (["errno.h", "stdio.h", "unistd.h"], "int r = truncate(p, 0);"),
         "statx": (
-            ["errno.h", "stdio.h", "linux/stat.h", "sys/stat.h", "fcntl.h", "unistd.h"],
-            "struct statx stx; int r = statx(AT_FDCWD, p, 0, STATX_BASIC_STATS, &stx);",
+            ["errno.h", "stdio.h", "linux/stat.h", "sys/syscall.h", "unistd.h"],
+            "struct statx stx; long r = syscall(SYS_statx, AT_FDCWD, p, 0, STATX_BASIC_STATS, &stx);",
         ),
         "statfs": (["errno.h", "stdio.h", "sys/statfs.h"], "struct statfs sf; int r = statfs(p, &sf);"),
         "mount": (

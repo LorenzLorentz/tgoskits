@@ -1,0 +1,1 @@
+CASE signalfd4.einval ret=-1 errno=22 note=handwritten
