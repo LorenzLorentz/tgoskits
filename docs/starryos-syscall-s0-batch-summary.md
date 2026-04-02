@@ -18,6 +18,7 @@
 | 期望 oracle 行 | `test-suit/starryos/probes/expected/*.line` | `verify-oracle` / `verify-oracle-all` |
 | 构建/差分脚本 | `build-probes.sh`、`run-diff-probes.sh`、`list-contract-probes.sh`、`diff-guest-line.sh`、`run-starry-probe-qemu.sh`、`run-starry-probe-qemu-smp2.sh`、`run-smp2-guest-matrix.sh` | 批量 oracle / guest 比对 / QEMU 单核与 SMP2 / 全 contract 矩阵 |
 | 覆盖检查 | `scripts/check_probe_coverage.py` | catalog `tests:` 路径存在性 |
+| 矩阵一致性 | `scripts/check_compat_matrix.py` | `parity: partial|aligned` 行对应 `contract/*.c` 与 `expected/*` |
 | 基准 rootfs | `test-suit/starryos/scripts/ensure-starry-base-rootfs.sh` | 缺盘时自动 `cargo xtask starry rootfs --arch riscv64`；矩阵与 `prepare-rootfs-with-probe` 共用 |
 | 镜像注入 | `prepare-rootfs-with-probe.sh`、`prepare-rootfs-with-write_stdout-probe.sh` | 通用注入 + `write_stdout` 兼容路径 |
 | QEMU 用例 | `test-suit/starryos/testcases/probe-*-0` | `shell_init_cmd` 多行脚本 |

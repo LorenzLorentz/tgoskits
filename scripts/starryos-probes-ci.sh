@@ -11,6 +11,9 @@ python3 scripts/extract_starry_syscalls.py --check-catalog docs/starryos-syscall
 echo "== probe path coverage =="
 python3 scripts/check_probe_coverage.py
 
+echo "== compat matrix vs probes =="
+python3 scripts/check_compat_matrix.py
+
 echo "== shell syntax =="
 for f in "$ROOT/test-suit/starryos/scripts/"*.sh; do
   [ -f "$f" ] || continue

@@ -4,7 +4,7 @@
 
 仓库根目录 **`.github/workflows/starryos-probes.yml`** 已实现：
 
-1. **static**：安装 `python3-yaml` 后运行 **`./scripts/starryos-probes-ci.sh`**（catalog、覆盖、shell 语法；若 runner 上存在 `riscv64-linux-gnu-gcc` 或 `riscv64-linux-musl-gcc` 则顺带交叉编译）。
+1. **static**：安装 `python3-yaml` 后运行 **`./scripts/starryos-probes-ci.sh`**（catalog、覆盖、**`check_compat_matrix.py`**、shell 语法；若 runner 上存在 `riscv64-linux-gnu-gcc` 或 `riscv64-linux-musl-gcc` 则顺带交叉编译）。
 2. **linux-oracle**：安装 `python3-yaml`、`qemu-user`、`gcc-riscv64-linux-gnu`，用 **GNU** 静态链接构建探针后执行 **`VERIFY_STRICT=1`** 的 **`verify-oracle-all`**。
 
 3. **SMP2 guest 矩阵（重）**：**`.github/workflows/starryos-probes-smp2-matrix.yml`** — 仅在 **`workflow_dispatch`** 与 **定时（UTC 02:00）** 运行；在 **`ghcr.io/<repo>-container`** 内执行 **`run-smp2-guest-matrix.sh`**（`CC=riscv64-linux-gnu-gcc`），上传 **`starry-smp2-matrix-logs/`** artifact。不在 push 上触发，避免拖慢默认 CI。
