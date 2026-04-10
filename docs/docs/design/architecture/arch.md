@@ -58,6 +58,6 @@ flowchart TD
 
 ## 相关文档
 
-- [组件开发指南](/docs/reference/components) — 组件修改与验证的完整说明
-- [依赖图全量分析](../../reference/tgoskits-dependency) — 149 个 crate 的依赖关系
+- [组件开发指南](/docs/design/reference/components) — 组件修改与验证的完整说明
+- [依赖图全量分析](/docs/design/reference/tgoskits-dependency) — 149 个 crate 的依赖关系
 - [系统关系](../../introduction/guest) — 三套系统的关系说明

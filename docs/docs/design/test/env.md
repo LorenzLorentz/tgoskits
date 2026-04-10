@@ -20,4 +20,4 @@ sidebar_label: "测试环境"
 | **StarryOS** | rootfs 相关工具与镜像准备脚本 |
 | **Axvisor** | Guest 镜像、VM 配置、rootfs、`setup_qemu.sh` |
 
-完整环境安装命令：[快速开始指南](../../reference/quick-start)
+完整环境安装命令：[快速开始指南](/docs/design/reference/quick-start)

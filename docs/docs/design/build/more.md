@@ -22,4 +22,4 @@ sidebar_label: "Snapshot 与 Build Info"
 - 新增或重构子命令
 - 核对不同系统的默认配置查找顺序
 
-详细说明：[构建系统完整说明](../../reference/build-system)
+详细说明：[构建系统完整说明](/docs/design/reference/build-system)

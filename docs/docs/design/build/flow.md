@@ -47,4 +47,4 @@ axbuild::run()
 - [Arch / Target 映射](./arch) — `--arch` 与 `--target` 的关系
 - [Snapshot 与 Build Info](./more) — 参数持久化与构建上下文
 - [ostool 执行后端](./ostool) — 底层编译与镜像生成
-- [构建系统完整说明](../../reference/build-system) — 详细技术文档
+- [构建系统完整说明](/docs/design/reference/build-system) — 详细技术文档

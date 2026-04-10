@@ -22,4 +22,4 @@ sidebar_label: "验证策略"
 | StarryOS | rootfs + 最小 `qemu` 路径 |
 | Axvisor | `setup_qemu.sh` + `cargo xtask axvisor qemu` |
 
-详细说明：[组件开发指南](/docs/reference/components)
+详细说明：[组件开发指南](/docs/design/reference/components)

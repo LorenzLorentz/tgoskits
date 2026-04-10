@@ -4,6 +4,6 @@
   "link": {
     "type": "generated-index",
     "title": "快速开始",
-    "description": "从最短命令入口开始，跑通当前仓库的三套系统。"
+    "description": "按系统分类，在不同 QEMU 平台上跑通 ArceOS、StarryOS 与 Axvisor。"
   }
 }

@@ -27,4 +27,4 @@ sidebar_label: "Arch / Target 映射"
 2. 调试工具链、链接或平台问题时，查看 target triple
 3. 混用旧命令时，先确认当前子命令接受的是 `--arch` 还是 `--target`
 
-完整映射表：[构建系统完整说明](../../reference/build-system)
+完整映射表：[构建系统完整说明](/docs/design/reference/build-system)

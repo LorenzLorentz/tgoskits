@@ -17,7 +17,7 @@ TGOSKits 不是单一系统仓库，因此"支持什么硬件"需要从开发宿
 | 模拟器 | QEMU (system-arm, system-riscv64, system-x86) | 系统级验证的主要环境 |
 | 辅助 | `cargo-binutils`, `ostool` | 二进制分析、镜像操作 |
 
-完整安装步骤见：[快速开始指南](../reference/quick-start) 第 2 节
+完整安装步骤见：[快速开始指南](/docs/design/reference/quick-start) 第 2 节
 
 ## 默认验证路径
 
@@ -54,6 +54,6 @@ TGOSKits 不是单一系统仓库，因此"支持什么硬件"需要从开发宿
 
 ## 相关文档
 
-- [统一快速上手](../quickstart/aarch64)
+- [统一快速上手](/docs/quickstart/arceos-qemu)
 - [QEMU 部署](../manual/deploy/qemu)
 - [Arch / Target 映射](../design/build/arch)

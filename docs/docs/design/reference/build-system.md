@@ -1018,7 +1018,7 @@ cargo xtask clippy
 
 - [quick-start.md](quick-start)
 - [components.md](components)
-- [arceos-guide.md](../guides/arceos-guide)
-- [starryos-guide.md](../guides/starryos-guide)
-- [axvisor-guide.md](../guides/axvisor-guide)
+- [arceos-guide.md](/docs/design/systems/arceos-guide)
+- [starryos-guide.md](/docs/design/systems/starryos-guide)
+- [axvisor-guide.md](/docs/design/systems/axvisor-guide)
 - [repo.md](repo.md)

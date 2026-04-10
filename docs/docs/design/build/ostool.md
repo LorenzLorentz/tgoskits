@@ -23,4 +23,4 @@ sidebar_label: "ostool 与执行后端"
 - `command_flow` 模块
 - `ostool` 相关调用点
 
-相关文档：[构建流程](./flow) | [构建系统完整说明](../../reference/build-system)
+相关文档：[构建流程](./flow) | [构建系统完整说明](/docs/design/reference/build-system)

@@ -2,7 +2,7 @@
 
 本文档面向准备修改 Hypervisor 运行时、VMM、vCPU 调度、板级配置、Guest 启动流程或 `axvisor_api` 的开发者，重点阐述 AxVisor 的组织原理与关键执行路径。
 
-若需要先运行 QEMU 示例，请先阅读 [quick-start.md](/docs/reference/quick-start) 和 [axvisor-guide.md](../guides/axvisor-guide)。
+若需要先运行 QEMU 示例，请先阅读 [quick-start.md](/docs/design/reference/quick-start) 和 [axvisor-guide.md](/docs/design/systems/axvisor-guide)。
 
 ## 1. 系统定位与设计目标
 
@@ -567,6 +567,6 @@ cargo axvisor test qemu --target aarch64
 
 关联阅读建议：
 
-- [axvisor-guide.md](../guides/axvisor-guide)：更偏“上手命令、配置路径和 Guest 准备”。
-- [build-system.md](/docs/reference/build-system)：更偏“根工作区入口与 AxVisor 本地 xtask 的边界”。
-- [arceos-internals.md](/docs/internals/arceos-internals)：更偏“AxVisor 复用的宿主运行时和底层模块能力”。
+- [axvisor-guide.md](/docs/design/systems/axvisor-guide)：更偏“上手命令、配置路径和 Guest 准备”。
+- [build-system.md](/docs/design/reference/build-system)：更偏“根工作区入口与 AxVisor 本地 xtask 的边界”。
+- [arceos-internals.md](/docs/design/architecture/arceos-internals)：更偏“AxVisor 复用的宿主运行时和底层模块能力”。

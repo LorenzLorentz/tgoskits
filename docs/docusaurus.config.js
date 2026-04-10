@@ -127,7 +127,7 @@ const config = {
           title: '文档',
           items: [
             {label: '项目概览', to: '/docs/introduction/overview'},
-            {label: '快速开始', to: '/docs/quickstart/aarch64'},
+            {label: '快速开始', to: '/docs/quickstart/arceos-qemu'},
             {label: '架构设计', to: '/docs/design/architecture/arch'},
             {label: '使用手册', to: '/docs/manual/deploy/qemu'},
           ],
@@ -135,9 +135,9 @@ const config = {
         {
           title: '系统',
           items: [
-            {label: 'ArceOS', to: '/docs/guides/arceos-guide'},
-            {label: 'StarryOS', to: '/docs/guides/starryos-guide'},
-            {label: 'Axvisor', to: '/docs/guides/axvisor-guide'},
+            {label: 'ArceOS', to: '/docs/design/systems/arceos-guide'},
+            {label: 'StarryOS', to: '/docs/design/systems/starryos-guide'},
+            {label: 'Axvisor', to: '/docs/design/systems/axvisor-guide'},
             {label: '组件库', to: '/docs/crates'},
           ],
         },
@@ -146,7 +146,7 @@ const config = {
           items: [
             {label: 'GitHub 仓库', href: 'https://github.com/rcore-os/tgoskits'},
             {label: '构建系统', to: '/docs/design/build/flow'},
-            {label: '组件依赖图', to: '/docs/reference/tgoskits-dependency'},
+            {label: '组件依赖图', to: '/docs/design/reference/tgoskits-dependency'},
             {label: 'Blog', to: '/blog'},
             {label: 'Community', to: '/community/introduction'},
           ],

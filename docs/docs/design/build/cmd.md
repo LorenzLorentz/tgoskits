@@ -33,4 +33,4 @@ sidebar_label: "命令总览"
 | 检查 std crate | `cargo xtask test` |
 | 静态分析 | `cargo xtask clippy` |
 
-完整参数与行为说明：[构建系统完整说明](../../reference/build-system)
+完整参数与行为说明：[构建系统完整说明](/docs/design/reference/build-system)

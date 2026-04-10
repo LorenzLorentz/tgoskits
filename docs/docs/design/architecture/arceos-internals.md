@@ -7,7 +7,7 @@
 - 启动、调度、文件系统、网络等核心子系统的内部协作机制。
 - 功能改进、性能优化或二次开发的推荐切入点。
 
-若仅需要运行示例，请先阅读 [quick-start.md](/docs/reference/quick-start) 和 [arceos-guide.md](../guides/arceos-guide)。
+若仅需要运行示例，请先阅读 [quick-start.md](/docs/design/reference/quick-start) 和 [arceos-guide.md](/docs/design/systems/arceos-guide)。
 
 ## 1. 系统定位与设计目标
 
@@ -406,7 +406,7 @@ fn main() {
 - 使用 QEMU 做最小验证。
 - 首次固定 `riscv64` 架构，流程稳定后再切换至 `x86_64`、`aarch64` 或 `loongarch64`。
 
-最小工具准备可直接参考 [quick-start.md](/docs/reference/quick-start)，此处仅列出 ArceOS 最常用的部分：
+最小工具准备可直接参考 [quick-start.md](/docs/design/reference/quick-start)，此处仅列出 ArceOS 最常用的部分：
 
 ```bash
 rustup target add riscv64gc-unknown-none-elf
@@ -587,10 +587,10 @@ make A=examples/helloworld ARCH=riscv64 debug
 1. 从 `os/arceos/modules/axruntime/src/lib.rs` 阅读完整初始化路径。
 2. 阅读 `os/arceos/api/axfeat` 与 `ax-runtime/Cargo.toml`，理解 feature 到模块的装配关系。
 3. 根据关注的子系统分别进入 `ax-task`、`ax-mm`、`ax-driver`、`ax-fs`、`ax-net`。
-4. 若改动波及上层系统，继续阅读 [starryos-internals.md](/docs/internals/starryos-internals) 与 [axvisor-internals.md](/docs/internals/axvisor-internals)。
+4. 若改动波及上层系统，继续阅读 [starryos-internals.md](/docs/design/architecture/starryos-internals) 与 [axvisor-internals.md](/docs/design/architecture/axvisor-internals)。
 
 关联文档：
 
-- [arceos-guide.md](../guides/arceos-guide)：更偏“目录、命令和验证闭环”。
-- [components.md](/docs/reference/components)：更偏“组件如何流向三个系统”。
-- [build-system.md](/docs/reference/build-system)：更偏“workspace、xtask、Makefile、CI 测试入口”。
+- [arceos-guide.md](/docs/design/systems/arceos-guide)：更偏“目录、命令和验证闭环”。
+- [components.md](/docs/design/reference/components)：更偏“组件如何流向三个系统”。
+- [build-system.md](/docs/design/reference/build-system)：更偏“workspace、xtask、Makefile、CI 测试入口”。

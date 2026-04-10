@@ -2,7 +2,7 @@
 
 本文档面向准备修改 StarryOS 内核、补充 Linux 兼容语义、分析 syscall 路径或调整 rootfs 验证流程的开发者，重点阐述 StarryOS 的内部结构与执行机制。
 
-若尚未运行过 StarryOS，建议先阅读 [quick-start.md](/docs/reference/quick-start)。
+若尚未运行过 StarryOS，建议先阅读 [quick-start.md](/docs/design/reference/quick-start)。
 
 ## 1. 系统定位与设计目标
 
@@ -488,10 +488,10 @@ make ARCH=riscv64 debug
 1. 从 `os/StarryOS/starryos/src/main.rs` 和 `kernel/src/entry.rs` 阅读系统启动主线。
 2. 阅读 `kernel/src/syscall/mod.rs`，理解 syscall 分流到不同子系统的机制。
 3. 进入 `kernel/src/task/*`、`kernel/src/mm/*` 深入理解进程、线程和地址空间。
-4. 若问题落在底层共享能力，参考 [arceos-internals.md](/docs/internals/arceos-internals) 中 ArceOS 模块层的说明。
+4. 若问题落在底层共享能力，参考 [arceos-internals.md](/docs/design/architecture/arceos-internals) 中 ArceOS 模块层的说明。
 
 关联文档：
 
-- [starryos-guide.md](../guides/starryos-guide)：更偏“目录、命令与运行方式”。
-- [arceos-internals.md](/docs/internals/arceos-internals)：更偏“StarryOS 所复用的底层模块”。
-- [build-system.md](/docs/reference/build-system)：更偏“xtask、Makefile、rootfs 与测试入口的关系”。
+- [starryos-guide.md](/docs/design/systems/starryos-guide)：更偏“目录、命令与运行方式”。
+- [arceos-internals.md](/docs/design/architecture/arceos-internals)：更偏“StarryOS 所复用的底层模块”。
+- [build-system.md](/docs/design/reference/build-system)：更偏“xtask、Makefile、rootfs 与测试入口的关系”。
