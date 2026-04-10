@@ -1,0 +1,9 @@
+{
+  "label": "快速开始",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "title": "快速开始",
+    "description": "从最短命令入口开始，跑通当前仓库的三套系统。"
+  }
+}

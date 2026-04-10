@@ -20,14 +20,14 @@ This repository contains multiple systems and dozens of standalone components. D
 
 | Your Goal | Recommended First Reading | Shortest Command |
 | --- | --- | --- |
-| First successful run | [docs/quick-start.md](docs/quick-start.md) | `cargo xtask arceos qemu --package ax-helloworld --arch riscv64` |
-| Full development example | [docs/demo.md](docs/demo.md) | A complete example for creating or modifying a component from scratch |
-| Component development guide | [docs/components.md](docs/components.md) | Start from `components/` or `os/arceos/modules/` |
-| Develop ArceOS | [docs/arceos-guide.md](docs/arceos-guide.md) | `cargo xtask arceos qemu --package ax-helloworld --arch riscv64` |
-| Develop StarryOS | [docs/starryos-guide.md](docs/starryos-guide.md) | `cargo xtask starry qemu --arch riscv64` |
-| Develop Axvisor | [docs/axvisor-guide.md](docs/axvisor-guide.md) | `cargo xtask axvisor test qemu --target aarch64` |
-| Understand the build and test matrix | [docs/build-system.md](docs/build-system.md) | `cargo xtask test` |
-| Understand how the repository organizes many standalone components | [docs/repo.md](docs/repo.md) | `python3 scripts/repo/repo.py list` |
+| First successful run | [docs/docs/quickstart/qemu/aarch64.md](docs/docs/quickstart/qemu/aarch64.md) | `cargo xtask arceos qemu --package ax-helloworld --arch riscv64` |
+| Full development example | [docs/docs/demo.md](docs/docs/demo.md) | A complete example for creating or modifying a component from scratch |
+| Component development guide | [docs/docs/design/architecture/arch.md](docs/docs/design/architecture/arch.md) | Start from `components/` or `os/arceos/modules/` |
+| Develop ArceOS | [docs/docs/arceos-guide.md](docs/docs/arceos-guide.md) | `cargo xtask arceos qemu --package ax-helloworld --arch riscv64` |
+| Develop StarryOS | [docs/docs/starryos-guide.md](docs/docs/starryos-guide.md) | `cargo xtask starry qemu --arch riscv64` |
+| Develop Axvisor | [docs/docs/manual/deploy/qemu.md](docs/docs/manual/deploy/qemu.md) | `cargo xtask axvisor test qemu --target aarch64` |
+| Understand the build and test matrix | [docs/docs/design/build/flow.md](docs/docs/design/build/flow.md) | `cargo xtask test` |
+| Understand how the repository organizes many standalone components | [docs/docs/repo.md](docs/docs/repo.md) | `python3 scripts/repo/repo.py list` |
 
 ## 2. Repository Layout
 
@@ -64,7 +64,7 @@ feature/* ──PR──► dev
                  main
 ```
 
-If you need to synchronize with component repositories, maintainers should explicitly run `scripts/repo/repo.py pull/push`. See [docs/repo.md](docs/repo.md) for details.
+If you need to synchronize with component repositories, maintainers should explicitly run `scripts/repo/repo.py pull/push`. See [docs/docs/repo.md](docs/docs/repo.md) for details.
 
 ## 3. Quick Experience
 
@@ -90,7 +90,7 @@ cargo xtask axvisor qemu --arch aarch64
 cargo axvisor qemu --arch aarch64
 ```
 
-Axvisor cannot be started only with `build/qemu`, because guest images, VM configuration, and rootfs are still required before runtime. It is recommended to use `os/axvisor/scripts/setup_qemu.sh` to prepare those runtime resources first, then run `cargo xtask axvisor qemu --arch <arch>`. See [docs/axvisor-guide.md](docs/axvisor-guide.md) for the full workflow.
+Axvisor cannot be started only with `build/qemu`, because guest images, VM configuration, and rootfs are still required before runtime. It is recommended to use `os/axvisor/scripts/setup_qemu.sh` to prepare those runtime resources first, then run `cargo xtask axvisor qemu --arch <arch>`. See [docs/docs/manual/deploy/qemu.md](docs/docs/manual/deploy/qemu.md) and [docs/docs/axvisor-guide.md](docs/docs/axvisor-guide.md) for the full workflow.
 
 ## 4. Quick Development
 
@@ -115,7 +115,7 @@ cargo xtask axvisor qemu --arch aarch64
 cargo xtask axvisor test qemu --target aarch64
 ```
 
-See [docs/components.md](docs/components.md) for component validation strategies after modifications.
+See [docs/docs/design/test/test.md](docs/docs/design/test/test.md) and [docs/docs/components.md](docs/docs/components.md) for component validation strategies after modifications.
 
 ## 5. License
 
