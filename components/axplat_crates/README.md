@@ -21,7 +21,7 @@ English | [中文](README_CN.md)
 
 - `axplat`
 - `axplat-macros`
-- `cargo-axplat`
+- `axplat-cargo` (`cargo-axplat` binary)
 - `platforms/axplat-x86-pc`
 - `platforms/axplat-aarch64-peripherals`
 - `platforms/axplat-aarch64-qemu-virt`

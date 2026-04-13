@@ -21,7 +21,7 @@
 
 - `axplat`
 - `axplat-macros`
-- `cargo-axplat`
+- `axplat-cargo`（二进制仍为 `cargo-axplat`）
 - `platforms/axplat-x86-pc`
 - `platforms/axplat-aarch64-peripherals`
 - `platforms/axplat-aarch64-qemu-virt`

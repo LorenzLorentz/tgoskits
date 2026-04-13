@@ -71,7 +71,7 @@ RUN set -eux; \
     cd /tmp/rust-toolchain; \
     rustc --version; \
     cargo --version; \
-    cargo install cargo-binutils axconfig-gen cargo-axplat
+    cargo install cargo-binutils axconfig-gen axplat-cargo
 
 WORKDIR /workspace
 

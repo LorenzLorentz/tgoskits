@@ -1,11 +1,11 @@
-<h1 align="center">cargo-axplat</h1>
+<h1 align="center">axplat-cargo</h1>
 
 <p align="center">Manages hardware platform packages using `axplat`</p>
 
 <div align="center">
 
-[![Crates.io](https://img.shields.io/crates/v/cargo-axplat.svg)](https://crates.io/crates/cargo-axplat)
-[![Docs.rs](https://docs.rs/cargo-axplat/badge.svg)](https://docs.rs/cargo-axplat)
+[![Crates.io](https://img.shields.io/crates/v/axplat-cargo.svg)](https://crates.io/crates/axplat-cargo)
+[![Docs.rs](https://docs.rs/axplat-cargo/badge.svg)](https://docs.rs/axplat-cargo)
 [![Rust](https://img.shields.io/badge/edition-2024-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 
@@ -15,7 +15,7 @@
 
 # 介绍
 
-`cargo-axplat` 提供了 Manages hardware platform packages using `axplat`。它是 TGOSKits 组件集合的一部分，可用于集成 ArceOS、AxVisor 及相关底层系统软件的 Rust 项目。
+`axplat-cargo` 提供了 Manages hardware platform packages using `axplat`。它是 TGOSKits 组件集合的一部分，可用于集成 ArceOS、AxVisor 及相关底层系统软件的 Rust 项目。安装后的二进制仍为 `cargo-axplat`，因此 `cargo axplat` 用法不变。
 
 ## 快速开始
 
@@ -25,7 +25,7 @@
 
 ```toml
 [dependencies]
-cargo-axplat = "0.4.5"
+axplat-cargo = "0.4.5"
 ```
 
 ### 检查与测试
@@ -55,7 +55,7 @@ cargo doc --no-deps
 use cargo_axplat as _;
 
 fn main() {
-    // 在这里将 `cargo-axplat` 集成到你的项目中。
+    // 在这里将 `axplat-cargo` 集成到你的项目中。
 }
 ```
 
@@ -67,7 +67,7 @@ fn main() {
 cargo doc --no-deps --open
 ```
 
-在线文档：[docs.rs/cargo-axplat](https://docs.rs/cargo-axplat)
+在线文档：[docs.rs/axplat-cargo](https://docs.rs/axplat-cargo)
 
 # 贡献
 
