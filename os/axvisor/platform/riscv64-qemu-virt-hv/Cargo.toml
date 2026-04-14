@@ -3,6 +3,7 @@ edition = "2024"
 name = "riscv64-qemu-virt-hv"
 version = "0.5.0"
 repository = "https://github.com/rcore-os/tgoskits"
+description = "RISC-V QEMU virt hypervisor platform support for Axvisor."
 license = "Apache-2.0"
 
 [features]
