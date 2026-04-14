@@ -326,7 +326,7 @@ axbacktrace = { path = "components/axbacktrace", version = "0.3.3" }
 axdevice = { path = "components/axdevice", version = "0.4.2" }
 axdevice_base = { path = "components/axdevice_base", version = "0.4.2" }
 ax-errno = { path = "components/axerrno", version = "0.4.2" }
-axfs-ng-vfs = { path = "components/axfs-ng-vfs", version = "0.3.1" }
+axfs-ng-vfs = { path = "components/axfs-ng-vfs", version = "0.3.2" }
 axhvc = { path = "components/axhvc", version = "0.4.0" }
 ax-io = { path = "components/axio", version = "0.5.0" }
 axklib = { path = "components/axklib", version = "0.5.0" }
@@ -380,7 +380,7 @@ dma-api = { version = "0.7.2" }
 
 # === starry-* ===
 starry-process = { version = "0.4.1", path = "components/starry-process" }
-starry-signal = { version = "0.5.0", path = "components/starry-signal" }
+starry-signal = { version = "0.5.1", path = "components/starry-signal" }
 starry-vm = { version = "0.5.1", path = "components/starry-vm" }
 lazy_static = { version = "1.5", features = ["spin_no_std"] }
 lock_api = { version = "0.4", default-features = false }

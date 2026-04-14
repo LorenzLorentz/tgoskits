@@ -54,7 +54,7 @@ ax-task.workspace = true
 
 axbacktrace = "0.3.3"
 ax-errno = "0.4.2"
-axfs-ng-vfs = "0.3.1"
+axfs-ng-vfs = "0.3.2"
 ax-io = "0.5.0"
 axpoll = "0.3.3"
 bitflags = "2.10"
@@ -96,7 +96,7 @@ scope-local = "0.3.2"
 slab = { version = "0.4.9", default-features = false }
 spin = "0.10"
 starry-process = "0.4.1"
-starry-signal = "0.5.0"
+starry-signal = "0.5.1"
 starry-vm = "0.5.1"
 strum = { version = "0.28", default-features = false, features = ["derive"] }
 syscalls = { version = "0.8", default-features = false }
