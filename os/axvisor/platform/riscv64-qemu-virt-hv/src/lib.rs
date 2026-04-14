@@ -1,19 +1,31 @@
 #![no_std]
 
-#[macro_use]
-extern crate log;
+macro_rules! riscv64_only {
+    ($($item:item)*) => {
+        $(
+            #[cfg(target_arch = "riscv64")]
+            $item
+        )*
+    };
+}
+
 #[macro_use]
 extern crate ax_plat;
 
-#[cfg(feature = "irq")]
-pub mod irq;
+riscv64_only! {
+    #[macro_use]
+    extern crate log;
 
-mod boot;
-mod console;
-mod init;
-mod mem;
-mod power;
-mod time;
+    #[cfg(feature = "irq")]
+    pub mod irq;
+
+    mod boot;
+    mod console;
+    mod init;
+    mod mem;
+    mod power;
+    mod time;
+}
 
 pub mod config {
     //! Platform configuration module.
