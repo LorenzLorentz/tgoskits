@@ -48,7 +48,6 @@ axhvc
 axklib
 axpoll
 axvmconfig
-bitmap-allocator
 range-alloc-arceos
 riscv-h
 scope-local

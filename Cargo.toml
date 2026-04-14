@@ -36,7 +36,6 @@ members = [
     "components/axvcpu",
     "components/axvm",
     "components/axvmconfig",
-    "components/bitmap-allocator",
     "components/cap_access",
     "components/cpumask",
     "components/handler_table",
@@ -235,9 +234,6 @@ ax-ctor-bare-macros = { path = "components/ctor_bare/ctor_bare_macros" }
 # === memory (axmm_crates) ===
 ax-memory-addr = { path = "components/axmm_crates/memory_addr" }
 ax-memory-set = { path = "components/axmm_crates/memory_set" }
-
-# === bitmap-allocator ===
-bitmap-allocator = { path = "components/bitmap-allocator" }
 
 # === ax-kernel-guard ===
 ax-kernel-guard = { path = "components/kernel_guard" }

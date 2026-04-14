@@ -18,7 +18,6 @@ ax-sched
 axvcpu
 axvm
 axvmconfig
-bitmap-allocator
 ax-cap-access
 ax-cpumask
 ax-handler-table

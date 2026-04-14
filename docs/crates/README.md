@@ -1,6 +1,6 @@
 # Crate 技术文档总览
 
-当前仓库共识别到 **149** 个带 `[package]` 的 Rust crate。本文档索引与 `docs/crates/*.md` 一起构成按 crate 维度的技术参考集合。
+当前仓库共识别到 **148** 个带 `[package]` 的 Rust crate。本文档索引与 `docs/crates/*.md` 一起构成按 crate 维度的技术参考集合。
 
 ## 分类统计
 
@@ -11,7 +11,7 @@
 - 工具层：`2` 个
 - 平台层：`2` 个
 - 测试层：`17` 个
-- 组件层：`93` 个
+- 组件层：`92` 个
 
 ## 文档索引
 
@@ -37,15 +37,15 @@
 | `arm_vcpu` | 组件层 | `components/arm_vcpu` | 6 | 1 | [查看](./arm_vcpu.md) |
 | `arm_vgic` | 组件层 | `components/arm_vgic` | 6 | 2 | [查看](./arm_vgic.md) |
 | `ax-alloc` | ArceOS 层 | `os/arceos/modules/axalloc` | 6 | 11 | [查看](./ax-alloc.md) |
-| `ax-allocator` | 组件层 | `components/axallocator` | 2 | 2 | [查看](./ax-allocator.md) |
+| `ax-allocator` | 组件层 | `components/axallocator` | 1 | 2 | [查看](./ax-allocator.md) |
 | `ax-api` | ArceOS 层 | `os/arceos/api/arceos_api` | 17 | 1 | [查看](./ax-api.md) |
 | `ax-arm-pl011` | 组件层 | `components/arm_pl011` | 0 | 1 | [查看](./ax-arm-pl011.md) |
 | `ax-arm-pl031` | 组件层 | `components/arm_pl031` | 0 | 1 | [查看](./ax-arm-pl031.md) |
 | `ax-cap-access` | 组件层 | `components/cap_access` | 0 | 1 | [查看](./ax-cap-access.md) |
 | `ax-config` | ArceOS 层 | `os/arceos/modules/axconfig` | 1 | 12 | [查看](./ax-config.md) |
 | `ax-config-gen` | 组件层 | `components/axconfig-gen/axconfig-gen` | 0 | 1 | [查看](./ax-config-gen.md) |
-| `ax-config-macros` | 组件层 | `components/axconfig-gen/axconfig-macros` | 1 | 12 | [查看](./ax-config-macros.md) |
-| `ax-cpu` | 组件层 | `components/axcpu` | 6 | 14 | [查看](./ax-cpu.md) |
+| `ax-config-macros` | 组件层 | `components/axconfig-gen/axconfig-macros` | 1 | 13 | [查看](./ax-config-macros.md) |
+| `ax-cpu` | 组件层 | `components/axcpu` | 6 | 15 | [查看](./ax-cpu.md) |
 | `ax-cpumask` | 组件层 | `components/cpumask` | 0 | 4 | [查看](./ax-cpumask.md) |
 | `ax-crate-interface` | 组件层 | `components/crate_interface` | 0 | 22 | [查看](./ax-crate-interface.md) |
 | `ax-crate-interface-lite` | 组件层 | `components/crate_interface/crate_interface_lite` | 0 | 0 | [查看](./ax-crate-interface-lite.md) |
@@ -58,7 +58,7 @@
 | `ax-driver-block` | 组件层 | `components/axdriver_crates/axdriver_block` | 1 | 3 | [查看](./ax-driver-block.md) |
 | `ax-driver-display` | 组件层 | `components/axdriver_crates/axdriver_display` | 1 | 2 | [查看](./ax-driver-display.md) |
 | `ax-driver-input` | 组件层 | `components/axdriver_crates/axdriver_input` | 1 | 2 | [查看](./ax-driver-input.md) |
-| `ax-driver-net` | 组件层 | `components/axdriver_crates/axdriver_net` | 2 | 2 | [查看](./ax-driver-net.md) |
+| `ax-driver-net` | 组件层 | `components/axdriver_crates/axdriver_net` | 2 | 3 | [查看](./ax-driver-net.md) |
 | `ax-driver-pci` | 组件层 | `components/axdriver_crates/axdriver_pci` | 0 | 1 | [查看](./ax-driver-pci.md) |
 | `ax-driver-virtio` | 组件层 | `components/axdriver_crates/axdriver_virtio` | 6 | 2 | [查看](./ax-driver-virtio.md) |
 | `ax-driver-vsock` | 组件层 | `components/axdriver_crates/axdriver_vsock` | 1 | 2 | [查看](./ax-driver-vsock.md) |
@@ -80,8 +80,8 @@
 | `ax-io` | 组件层 | `components/axio` | 1 | 9 | [查看](./ax-io.md) |
 | `ax-ipi` | ArceOS 层 | `os/arceos/modules/axipi` | 5 | 3 | [查看](./ax-ipi.md) |
 | `ax-kernel-guard` | 组件层 | `components/kernel_guard` | 1 | 6 | [查看](./ax-kernel-guard.md) |
-| `ax-kspin` | 组件层 | `components/kspin` | 1 | 21 | [查看](./ax-kspin.md) |
-| `ax-lazyinit` | 组件层 | `components/ax-lazyinit` | 0 | 17 | [查看](./ax-lazyinit.md) |
+| `ax-kspin` | 组件层 | `components/kspin` | 2 | 22 | [查看](./ax-kspin.md) |
+| `ax-lazyinit` | 组件层 | `components/ax-lazyinit` | 0 | 18 | [查看](./ax-lazyinit.md) |
 | `ax-libc` | ArceOS 层 | `os/arceos/ulib/axlibc` | 4 | 0 | [查看](./ax-libc.md) |
 | `ax-linked-list-r4l` | 组件层 | `components/linked_list_r4l` | 0 | 1 | [查看](./ax-linked-list-r4l.md) |
 | `ax-log` | ArceOS 层 | `os/arceos/modules/axlog` | 2 | 5 | [查看](./ax-log.md) |
@@ -92,9 +92,9 @@
 | `ax-net-ng` | ArceOS 层 | `os/arceos/modules/axnet-ng` | 11 | 2 | [查看](./ax-net-ng.md) |
 | `ax-page-table-entry` | 组件层 | `components/page_table_multiarch/page_table_entry` | 1 | 12 | [查看](./ax-page-table-entry.md) |
 | `ax-page-table-multiarch` | 组件层 | `components/page_table_multiarch/page_table_multiarch` | 3 | 7 | [查看](./ax-page-table-multiarch.md) |
-| `ax-percpu` | 组件层 | `components/percpu/percpu` | 2 | 17 | [查看](./ax-percpu.md) |
+| `ax-percpu` | 组件层 | `components/percpu/percpu` | 2 | 18 | [查看](./ax-percpu.md) |
 | `ax-percpu-macros` | 组件层 | `components/percpu/percpu_macros` | 0 | 1 | [查看](./ax-percpu-macros.md) |
-| `ax-plat` | 组件层 | `components/axplat_crates/axplat` | 6 | 15 | [查看](./ax-plat.md) |
+| `ax-plat` | 组件层 | `components/axplat_crates/axplat` | 6 | 16 | [查看](./ax-plat.md) |
 | `ax-plat-aarch64-bsta1000b` | 组件层 | `components/axplat_crates/platforms/axplat-aarch64-bsta1000b` | 6 | 1 | [查看](./ax-plat-aarch64-bsta1000b.md) |
 | `ax-plat-aarch64-peripherals` | 组件层 | `components/axplat_crates/platforms/axplat-aarch64-peripherals` | 7 | 4 | [查看](./ax-plat-aarch64-peripherals.md) |
 | `ax-plat-aarch64-phytium-pi` | 组件层 | `components/axplat_crates/platforms/axplat-aarch64-phytium-pi` | 5 | 1 | [查看](./ax-plat-aarch64-phytium-pi.md) |
@@ -102,16 +102,17 @@
 | `ax-plat-aarch64-raspi` | 组件层 | `components/axplat_crates/platforms/axplat-aarch64-raspi` | 5 | 1 | [查看](./ax-plat-aarch64-raspi.md) |
 | `ax-plat-loongarch64-qemu-virt` | 组件层 | `components/axplat_crates/platforms/axplat-loongarch64-qemu-virt` | 6 | 5 | [查看](./ax-plat-loongarch64-qemu-virt.md) |
 | `ax-plat-macros` | 组件层 | `components/axplat_crates/axplat-macros` | 1 | 1 | [查看](./ax-plat-macros.md) |
-| `ax-plat-riscv64-qemu-virt` | 组件层 | `components/axplat_crates/platforms/axplat-riscv64-qemu-virt` | 6 | 6 | [查看](./ax-plat-riscv64-qemu-virt.md) |
-| `riscv64-qemu-virt-hv` | Axvisor 层 | `os/axvisor/platform/riscv64-qemu-virt-hv` | 8 | 6 | [查看](./ax-plat-riscv64-qemu-virt.md) |
+| `ax-plat-riscv64-qemu-virt` | 组件层 | `components/axplat_crates/platforms/axplat-riscv64-qemu-virt` | 6 | 5 | [查看](./ax-plat-riscv64-qemu-virt.md) |
 | `ax-plat-x86-pc` | 组件层 | `components/axplat_crates/platforms/axplat-x86-pc` | 7 | 5 | [查看](./ax-plat-x86-pc.md) |
 | `ax-posix-api` | ArceOS 层 | `os/arceos/api/arceos_posix_api` | 13 | 1 | [查看](./ax-posix-api.md) |
+| `ax-riscv-plic` | 组件层 | `components/riscv_plic` | 0 | 2 | [查看](./ax-riscv-plic.md) |
 | `ax-runtime` | ArceOS 层 | `os/arceos/modules/axruntime` | 20 | 4 | [查看](./ax-runtime.md) |
 | `ax-sched` | 组件层 | `components/axsched` | 1 | 1 | [查看](./ax-sched.md) |
 | `ax-shell` | ArceOS 层 | `os/arceos/examples/shell` | 1 | 0 | [查看](./ax-shell.md) |
 | `ax-std` | ArceOS 层 | `os/arceos/ulib/axstd` | 6 | 22 | [查看](./ax-std.md) |
 | `ax-sync` | ArceOS 层 | `os/arceos/modules/axsync` | 2 | 9 | [查看](./ax-sync.md) |
 | `ax-task` | ArceOS 层 | `os/arceos/modules/axtask` | 13 | 8 | [查看](./ax-task.md) |
+| `ax-timer-list` | 组件层 | `components/timer_list` | 0 | 2 | [查看](./ax-timer-list.md) |
 | `axaddrspace` | 组件层 | `components/axaddrspace` | 6 | 12 | [查看](./axaddrspace.md) |
 | `axbacktrace` | 组件层 | `components/axbacktrace` | 0 | 5 | [查看](./axbacktrace.md) |
 | `axbuild` | 工具层 | `scripts/axbuild` | 1 | 3 | [查看](./axbuild.md) |
@@ -120,16 +121,15 @@
 | `axfs-ng-vfs` | 组件层 | `components/axfs-ng-vfs` | 2 | 3 | [查看](./axfs-ng-vfs.md) |
 | `axhvc` | 组件层 | `components/axhvc` | 1 | 1 | [查看](./axhvc.md) |
 | `axklib` | 组件层 | `components/axklib` | 2 | 3 | [查看](./axklib.md) |
-| `axplat-dyn` | 平台层 | `platform/axplat-dyn` | 11 | 2 | [查看](./axplat-dyn.md) |
+| `axplat-dyn` | 平台层 | `platform/axplat-dyn` | 12 | 4 | [查看](./axplat-dyn.md) |
 | `axplat-x86-qemu-q35` | 平台层 | `platform/x86-qemu-q35` | 7 | 1 | [查看](./axplat-x86-qemu-q35.md) |
 | `axpoll` | 组件层 | `components/axpoll` | 0 | 5 | [查看](./axpoll.md) |
 | `axvcpu` | 组件层 | `components/axvcpu` | 5 | 5 | [查看](./axvcpu.md) |
-| `axvisor` | Axvisor 层 | `os/axvisor` | 27 | 0 | [查看](./axvisor.md) |
+| `axvisor` | Axvisor 层 | `os/axvisor` | 28 | 0 | [查看](./axvisor.md) |
 | `axvisor_api` | 组件层 | `components/axvisor_api` | 5 | 10 | [查看](./axvisor_api.md) |
 | `axvisor_api_proc` | 组件层 | `components/axvisor_api/axvisor_api_proc` | 0 | 1 | [查看](./axvisor_api_proc.md) |
 | `axvm` | 组件层 | `components/axvm` | 16 | 1 | [查看](./axvm.md) |
 | `axvmconfig` | 组件层 | `components/axvmconfig` | 1 | 4 | [查看](./axvmconfig.md) |
-| `bitmap-allocator` | 组件层 | `components/bitmap-allocator` | 0 | 1 | [查看](./bitmap-allocator.md) |
 | `bwbench-client` | ArceOS 层 | `os/arceos/tools/bwbench_client` | 0 | 0 | [查看](./bwbench-client.md) |
 | `cargo-axplat` | 组件层 | `components/axplat_crates/cargo-axplat` | 0 | 0 | [查看](./cargo-axplat.md) |
 | `define-simple-traits` | 组件层 | `components/crate_interface/test_crates/define-simple-traits` | 1 | 2 | [查看](./define-simple-traits.md) |
@@ -144,7 +144,7 @@
 | `mingo` | ArceOS 层 | `os/arceos/tools/raspi4/chainloader` | 0 | 0 | [查看](./mingo.md) |
 | `range-alloc-arceos` | 组件层 | `components/range-alloc-arceos` | 0 | 1 | [查看](./range-alloc-arceos.md) |
 | `riscv-h` | 组件层 | `components/riscv-h` | 0 | 2 | [查看](./riscv-h.md) |
-| `ax-riscv-plic` | 组件层 | `components/riscv_plic` | 0 | 1 | [查看](./ax-riscv-plic.md) |
+| `riscv64-qemu-virt-hv` | Axvisor 层 | `os/axvisor/platform/riscv64-qemu-virt-hv` | 8 | 1 | [查看](./riscv64-qemu-virt-hv.md) |
 | `riscv_vcpu` | 组件层 | `components/riscv_vcpu` | 8 | 2 | [查看](./riscv_vcpu.md) |
 | `riscv_vplic` | 组件层 | `components/riscv_vplic` | 5 | 2 | [查看](./riscv_vplic.md) |
 | `rsext4` | 组件层 | `components/rsext4` | 0 | 1 | [查看](./rsext4.md) |
@@ -156,14 +156,13 @@
 | `starry-process` | 组件层 | `components/starry-process` | 2 | 1 | [查看](./starry-process.md) |
 | `starry-signal` | 组件层 | `components/starry-signal` | 3 | 1 | [查看](./starry-signal.md) |
 | `starry-vm` | 组件层 | `components/starry-vm` | 1 | 2 | [查看](./starry-vm.md) |
-| `starryos` | StarryOS 层 | `os/StarryOS/starryos` | 3 | 0 | [查看](./starryos.md) |
+| `starryos` | StarryOS 层 | `os/StarryOS/starryos` | 4 | 0 | [查看](./starryos.md) |
 | `starryos-test` | 测试层 | `test-suit/starryos` | 2 | 0 | [查看](./starryos-test.md) |
 | `test-simple` | 组件层 | `components/crate_interface/test_crates/test-simple` | 3 | 0 | [查看](./test-simple.md) |
 | `test-weak` | 组件层 | `components/crate_interface/test_crates/test-weak` | 3 | 0 | [查看](./test-weak.md) |
 | `test-weak-partial` | 组件层 | `components/crate_interface/test_crates/test-weak-partial` | 3 | 0 | [查看](./test-weak-partial.md) |
 | `tg-xtask` | 工具层 | `xtask` | 1 | 0 | [查看](./tg-xtask.md) |
 | `tgmath` | 其他 | `examples/tgmath` | 0 | 0 | [查看](./tgmath.md) |
-| `ax-timer-list` | 组件层 | `components/timer_list` | 0 | 2 | [查看](./ax-timer-list.md) |
 | `x86_vcpu` | 组件层 | `components/x86_vcpu` | 9 | 1 | [查看](./x86_vcpu.md) |
 | `x86_vlapic` | 组件层 | `components/x86_vlapic` | 5 | 1 | [查看](./x86_vlapic.md) |
 
