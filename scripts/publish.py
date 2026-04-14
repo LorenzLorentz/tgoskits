@@ -26,6 +26,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import tomllib
 from urllib.parse import urlparse
 import urllib.error
@@ -46,6 +47,10 @@ RATE_LIMIT_MARKERS = [
     "status 429 Too Many Requests",
     "You have published too many new crates in a short period of time",
 ]
+PUBLISH_INTERVAL_SECONDS = 60
+EXCLUDED_SUBTREES = (
+    Path("os/arceos/tools"),
+)
 
 
 @dataclass(frozen=True)
@@ -92,9 +97,12 @@ def load_metadata(manifest_path: Path | None) -> dict[str, Any]:
 
 
 def discover_workspace_manifests(search_root: Path) -> list[Path]:
+    repo_root = Path.cwd().resolve()
     manifests: list[Path] = []
     for manifest in sorted(search_root.rglob("Cargo.toml")):
         if "target" in manifest.parts:
+            continue
+        if is_excluded_path(manifest, repo_root):
             continue
         with manifest.open("rb") as fh:
             data = tomllib.load(fh)
@@ -107,8 +115,25 @@ def normalize_path(path: str | Path) -> Path:
     return Path(path).resolve()
 
 
+def is_path_under(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def is_excluded_path(path: Path, repo_root: Path) -> bool:
+    resolved_path = path.resolve()
+    return any(
+        is_path_under(resolved_path, (repo_root / subtree).resolve())
+        for subtree in EXCLUDED_SUBTREES
+    )
+
+
 def collect_packages(metadata_sets: list[dict[str, Any]], root: Path) -> dict[str, Package]:
     root = root.resolve()
+    repo_root = Path.cwd().resolve()
     selected: dict[str, Package] = {}
 
     for metadata in metadata_sets:
@@ -123,6 +148,8 @@ def collect_packages(metadata_sets: list[dict[str, Any]], root: Path) -> dict[st
             try:
                 crate_dir.relative_to(root)
             except ValueError:
+                continue
+            if is_excluded_path(crate_dir, repo_root):
                 continue
 
             publish = pkg.get("publish")
@@ -485,6 +512,7 @@ def main() -> int:
     ready_packages: set[str] = set()
     pending = list(order)
     completed_count = 0
+    publish_attempts = 0
 
     while pending:
         next_pending: list[str] = []
@@ -517,7 +545,14 @@ def main() -> int:
                 elif args.check:
                     print(f"{prefix} -> CHECK SKIP crate not published on crates.io")
                 else:
+                    if not args.dry_run and publish_attempts > 0:
+                        print(
+                            f"{prefix} -> WAIT {PUBLISH_INTERVAL_SECONDS}s before publish"
+                        )
+                        time.sleep(PUBLISH_INTERVAL_SECONDS)
                     status, detail = publish_package(pkg, args.dry_run)
+                    if not args.dry_run:
+                        publish_attempts += 1
                     if status == "FAILED":
                         any_failed = True
                         package_failed = True
