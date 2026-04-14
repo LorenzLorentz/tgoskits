@@ -96,7 +96,12 @@ def load_metadata(manifest_path: Path | None) -> dict[str, Any]:
     return json.loads(proc.stdout)
 
 
-def discover_workspace_manifests(search_root: Path) -> list[Path]:
+def cargo_toml_data(manifest: Path) -> dict[str, Any]:
+    with manifest.open("rb") as fh:
+        return tomllib.load(fh)
+
+
+def discover_cargo_manifests(search_root: Path) -> list[Path]:
     repo_root = Path.cwd().resolve()
     manifests: list[Path] = []
     for manifest in sorted(search_root.rglob("Cargo.toml")):
@@ -104,10 +109,7 @@ def discover_workspace_manifests(search_root: Path) -> list[Path]:
             continue
         if is_excluded_path(manifest, repo_root):
             continue
-        with manifest.open("rb") as fh:
-            data = tomllib.load(fh)
-        if "workspace" in data:
-            manifests.append(manifest.resolve())
+        manifests.append(manifest.resolve())
     return manifests
 
 
@@ -128,6 +130,177 @@ def is_excluded_path(path: Path, repo_root: Path) -> bool:
     return any(
         is_path_under(resolved_path, (repo_root / subtree).resolve())
         for subtree in EXCLUDED_SUBTREES
+    )
+
+
+def discover_workspace_manifests(search_root: Path) -> list[Path]:
+    manifests: list[Path] = []
+    for manifest in discover_cargo_manifests(search_root):
+        if "workspace" in cargo_toml_data(manifest):
+            manifests.append(manifest)
+    return manifests
+
+
+def dependency_tables(data: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    tables: list[tuple[str, dict[str, Any]]] = []
+    for key in ("dependencies", "build-dependencies", "dev-dependencies"):
+        table = data.get(key)
+        if isinstance(table, dict):
+            tables.append((key, table))
+
+    target_tables = data.get("target")
+    if not isinstance(target_tables, dict):
+        return tables
+
+    for target_data in target_tables.values():
+        if not isinstance(target_data, dict):
+            continue
+        for key in ("dependencies", "build-dependencies", "dev-dependencies"):
+            table = target_data.get(key)
+            if isinstance(table, dict):
+                tables.append((key, table))
+
+    return tables
+
+
+def find_enclosing_workspace_manifest(manifest_path: Path) -> Path | None:
+    current = manifest_path.parent
+    while True:
+        candidate = current / "Cargo.toml"
+        if candidate.exists():
+            data = cargo_toml_data(candidate)
+            if "workspace" in data:
+                return candidate.resolve()
+        if current == current.parent:
+            return None
+        current = current.parent
+
+
+def workspace_table(
+    workspace_data: dict[str, Any], section: str, name: str
+) -> Any | None:
+    workspace = workspace_data.get("workspace")
+    if not isinstance(workspace, dict):
+        return None
+    table = workspace.get(section)
+    if not isinstance(table, dict):
+        return None
+    return table.get(name)
+
+
+def resolve_workspace_value(
+    value: Any,
+    *,
+    workspace_data: dict[str, Any],
+    section: str,
+    name: str,
+) -> Any:
+    if isinstance(value, dict) and value.get("workspace") is True:
+        inherited = workspace_table(workspace_data, section, name)
+        if inherited is None:
+            raise SystemExit(
+                f"unable to resolve workspace {section} entry {name!r} from enclosing workspace"
+            )
+        return inherited
+    return value
+
+
+def dependency_kind(table_name: str) -> str | None:
+    if table_name == "build-dependencies":
+        return "build"
+    if table_name == "dev-dependencies":
+        return "dev"
+    return None
+
+
+def normalize_dependency_spec(name: str, spec: Any, kind: str | None) -> dict[str, Any]:
+    if isinstance(spec, str):
+        return {
+            "name": name,
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+            "req": spec,
+            "kind": kind,
+            "rename": None,
+            "optional": False,
+            "uses_default_features": True,
+            "features": [],
+            "target": None,
+            "registry": None,
+        }
+
+    if not isinstance(spec, dict):
+        raise SystemExit(f"unsupported dependency specification for {name!r}: {spec!r}")
+
+    dep_name = spec.get("package", name)
+    path = spec.get("path")
+    source = None if path else "registry+https://github.com/rust-lang/crates.io-index"
+    return {
+        "name": dep_name,
+        "source": source,
+        "req": spec.get("version", "*"),
+        "kind": kind,
+        "rename": None if dep_name == name else name,
+        "optional": bool(spec.get("optional", False)),
+        "uses_default_features": spec.get("default-features", True),
+        "features": list(spec.get("features", [])),
+        "target": None,
+        "registry": spec.get("registry"),
+        **({"path": path} if path else {}),
+    }
+
+
+def package_from_manifest(
+    manifest_path: Path,
+    *,
+    workspace_manifest: Path | None,
+) -> Package | None:
+    data = cargo_toml_data(manifest_path)
+    package_data = data.get("package")
+    if not isinstance(package_data, dict):
+        return None
+
+    workspace_data = cargo_toml_data(workspace_manifest) if workspace_manifest else {}
+
+    publish = package_data.get("publish")
+    if publish is False or publish == []:
+        return None
+
+    name = package_data.get("name")
+    if not isinstance(name, str) or not name:
+        raise SystemExit(f"package name missing in {manifest_path}")
+
+    version_value = resolve_workspace_value(
+        package_data.get("version"),
+        workspace_data=workspace_data,
+        section="package",
+        name="version",
+    )
+    if not isinstance(version_value, str) or not version_value:
+        raise SystemExit(f"package version missing in {manifest_path}")
+
+    dependencies: list[dict[str, Any]] = []
+    for table_name, table in dependency_tables(data):
+        kind = dependency_kind(table_name)
+        for dep_alias, raw_spec in table.items():
+            spec = resolve_workspace_value(
+                raw_spec,
+                workspace_data=workspace_data,
+                section="dependencies",
+                name=dep_alias,
+            )
+            dependencies.append(normalize_dependency_spec(dep_alias, spec, kind))
+
+    workspace_root = (
+        workspace_manifest.parent.resolve() if workspace_manifest else manifest_path.parent.resolve()
+    )
+    return Package(
+        name=name,
+        version=version_value,
+        manifest_path=manifest_path.resolve(),
+        package_id=str(manifest_path.resolve()),
+        workspace_root=workspace_root,
+        publish=publish,
+        dependencies=dependencies,
     )
 
 
@@ -170,6 +343,47 @@ def collect_packages(metadata_sets: list[dict[str, Any]], root: Path) -> dict[st
                     dependencies=pkg.get("dependencies", []),
                 ),
             )
+
+    return selected
+
+
+def metadata_manifest_paths(metadata_sets: list[dict[str, Any]]) -> set[Path]:
+    manifests: set[Path] = set()
+    for metadata in metadata_sets:
+        for pkg in metadata["packages"]:
+            manifests.add(normalize_path(pkg["manifest_path"]))
+    return manifests
+
+
+def collect_orphan_packages(
+    root: Path,
+    known_manifests: set[Path],
+) -> dict[str, Package]:
+    repo_root = Path.cwd().resolve()
+    selected: dict[str, Package] = {}
+
+    for manifest_path in discover_cargo_manifests(repo_root):
+        if manifest_path in known_manifests:
+            continue
+
+        try:
+            manifest_path.parent.relative_to(root)
+        except ValueError:
+            continue
+
+        data = cargo_toml_data(manifest_path)
+        if "package" not in data or "workspace" in data:
+            continue
+
+        workspace_manifest = find_enclosing_workspace_manifest(manifest_path)
+        package = package_from_manifest(
+            manifest_path,
+            workspace_manifest=workspace_manifest,
+        )
+        if package is None:
+            continue
+
+        selected[str(package.manifest_path)] = package
 
     return selected
 
@@ -461,6 +675,9 @@ def main() -> int:
                 skipped_workspaces.append(workspace_manifest)
 
     packages = collect_packages(metadata_sets, root)
+    packages.update(
+        collect_orphan_packages(root, metadata_manifest_paths(metadata_sets))
+    )
     if not packages:
         print(f"no publishable workspace packages found under {root}")
         return 0
