@@ -1859,7 +1859,7 @@ dependencies = [
 
 [[package]]
 name = "axvisor_api"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "ax-cpumask",
  "ax-crate-interface",
@@ -1870,7 +1870,7 @@ dependencies = [
 
 [[package]]
 name = "axvisor_api_proc"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
