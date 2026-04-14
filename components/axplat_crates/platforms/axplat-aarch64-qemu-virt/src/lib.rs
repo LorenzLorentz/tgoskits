@@ -1,12 +1,23 @@
 #![no_std]
 
+macro_rules! aarch64_only {
+    ($($item:item)*) => {
+        $(
+            #[cfg(target_arch = "aarch64")]
+            $item
+        )*
+    };
+}
+
 #[macro_use]
 extern crate ax_plat;
 
-mod boot;
-mod init;
-mod mem;
-mod power;
+aarch64_only! {
+    mod boot;
+    mod init;
+    mod mem;
+    mod power;
+}
 
 pub mod config {
     //! Platform configuration module.
@@ -24,8 +35,10 @@ pub mod config {
     );
 }
 
-ax_plat_aarch64_peripherals::console_if_impl!(ConsoleIfImpl);
-ax_plat_aarch64_peripherals::time_if_impl!(TimeIfImpl);
+aarch64_only! {
+    ax_plat_aarch64_peripherals::console_if_impl!(ConsoleIfImpl);
+    ax_plat_aarch64_peripherals::time_if_impl!(TimeIfImpl);
 
-#[cfg(feature = "irq")]
-ax_plat_aarch64_peripherals::irq_if_impl!(IrqIfImpl);
+    #[cfg(feature = "irq")]
+    ax_plat_aarch64_peripherals::irq_if_impl!(IrqIfImpl);
+}

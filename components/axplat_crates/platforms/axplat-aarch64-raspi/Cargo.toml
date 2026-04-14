@@ -17,12 +17,14 @@ smp = ["ax-plat/smp"]
 
 [dependencies]
 log = "0.4"
-aarch64-cpu = "11.0"
 ax-page-table-entry = "0.8.1"
 ax-config-macros = "0.4.1"
 ax-plat-aarch64-peripherals = { workspace = true }
 ax-cpu = { workspace = true }
 ax-plat = { workspace = true }
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+aarch64-cpu = "11.0"
 
 [package.metadata.docs.rs]
 targets = ["aarch64-unknown-none"]
