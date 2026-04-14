@@ -22,11 +22,13 @@ Typical usage:
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import ssl
 import subprocess
 import sys
+import tarfile
 import time
 import tomllib
 from urllib.parse import urlparse
@@ -498,6 +500,10 @@ def summarize_failure_detail(detail: str) -> str:
     return lines[-1]
 
 
+def canonical_crate_name(name: str) -> str:
+    return name.replace("_", "-")
+
+
 def pending_unmet_blockers(
     pending: list[str],
     ready_packages: set[str],
@@ -688,6 +694,97 @@ def crates_io_has_crate(crate: str, timeout: float = 15.0) -> bool:
             time.sleep(CRATES_IO_RETRY_DELAY_SECONDS)
 
 
+def crates_io_crate_data(crate: str, timeout: float = 15.0) -> dict[str, Any]:
+    crate_q = urllib.parse.quote(crate, safe="")
+    url = f"https://crates.io/api/v1/crates/{crate_q}"
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    for attempt in range(1, CRATES_IO_RETRY_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.load(resp)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return {}
+            raise
+        except (urllib.error.URLError, TimeoutError, ssl.SSLError):
+            if attempt == CRATES_IO_RETRY_ATTEMPTS:
+                raise
+            time.sleep(CRATES_IO_RETRY_DELAY_SECONDS)
+
+
+def crates_io_latest_version(crate: str, timeout: float = 15.0) -> str | None:
+    data = crates_io_crate_data(crate, timeout=timeout)
+    crate_data = data.get("crate")
+    if not isinstance(crate_data, dict):
+        return None
+    newest_version = crate_data.get("newest_version")
+    if isinstance(newest_version, str) and newest_version:
+        return newest_version
+    return None
+
+
+def download_crate_file(crate: str, version: str, timeout: float = 30.0) -> bytes:
+    crate_q = urllib.parse.quote(crate, safe="")
+    version_q = urllib.parse.quote(version, safe="")
+    url = f"https://crates.io/api/v1/crates/{crate_q}/{version_q}/download"
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    for attempt in range(1, CRATES_IO_RETRY_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.read()
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, TimeoutError, ssl.SSLError):
+            if attempt == CRATES_IO_RETRY_ATTEMPTS:
+                raise
+            time.sleep(CRATES_IO_RETRY_DELAY_SECONDS)
+
+
+def published_manifest_data(crate: str, version: str) -> dict[str, Any]:
+    archive = download_crate_file(crate, version)
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tf:
+        for preferred_suffix in ("Cargo.toml.orig", "Cargo.toml"):
+            for member in tf.getmembers():
+                if member.name.endswith(preferred_suffix):
+                    extracted = tf.extractfile(member)
+                    if extracted is None:
+                        break
+                    return tomllib.loads(extracted.read().decode())
+    raise RuntimeError(f"unable to locate Cargo.toml in published crate {crate} {version}")
+
+
+def manifest_dependency_names(manifest_data: dict[str, Any]) -> set[str]:
+    dependency_names: set[str] = set()
+    for _, table in dependency_tables(manifest_data):
+        for dep_alias, raw_spec in table.items():
+            if isinstance(raw_spec, str):
+                dependency_names.add(canonical_crate_name(dep_alias))
+            elif isinstance(raw_spec, dict):
+                dependency_names.add(
+                    canonical_crate_name(raw_spec.get("package", dep_alias))
+                )
+    return dependency_names
+
+
+def published_internal_dependency_mismatches(
+    package_id: str,
+    packages: dict[str, Package],
+    graph: dict[str, set[str]],
+    *,
+    version: str,
+) -> list[str]:
+    pkg = packages[package_id]
+    manifest_data = published_manifest_data(pkg.name, version)
+    published_deps = manifest_dependency_names(manifest_data)
+    expected = sorted(
+        {
+            canonical_crate_name(packages[dep_id].name)
+            for dep_id in graph[package_id]
+        }
+    )
+    return [dep_name for dep_name in expected if dep_name not in published_deps]
+
+
 def normalize_owner(owner: str) -> str:
     owner = owner.strip()
     if owner.startswith("github:"):
@@ -854,6 +951,15 @@ def main() -> int:
             "expected owner. Defaults to github:arceos-org:core or equation314."
         ),
     )
+    parser.add_argument(
+        "--check-published-deps",
+        action="store_true",
+        help=(
+            "Check whether already-published crate versions depend on the current "
+            "internal crate names used in this repository. If the current local "
+            "version is not published yet, inspect the latest published version."
+        ),
+    )
     args = parser.parse_args()
 
     root = normalize_path(args.root)
@@ -891,6 +997,37 @@ def main() -> int:
     graph = build_dependency_graph(packages)
     order = topo_sort(graph)
     workspace_blockers: dict[Path, set[str]] = {}
+
+    if args.check_published_deps:
+        any_failed = False
+        any_mismatch = False
+        for package_id in order:
+            pkg = packages[package_id]
+            try:
+                version_status = crates_io_version_status(pkg.name, pkg.version)
+                inspected_version = pkg.version
+                if not version_status.exists:
+                    inspected_version = crates_io_latest_version(pkg.name) or ""
+                if not inspected_version:
+                    continue
+                mismatches = published_internal_dependency_mismatches(
+                    package_id, packages, graph, version=inspected_version
+                )
+            except Exception as exc:  # noqa: BLE001
+                any_failed = True
+                print(f"{pkg.name}\tFAILED\t{exc}")
+                continue
+
+            if mismatches:
+                any_mismatch = True
+                print(
+                    f"{pkg.name}\tMISMATCH\tpublished {inspected_version} missing current internal deps: "
+                    + ", ".join(mismatches)
+                )
+            else:
+                print(f"{pkg.name}\tOK\tpublished {inspected_version}")
+
+        return 1 if any_failed or any_mismatch else 0
 
     if args.check:
         any_failed = False
