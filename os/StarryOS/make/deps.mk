@@ -2,8 +2,8 @@
 
 # Tool to parse information about the target package
 ifeq ($(shell cargo axplat --version 2>/dev/null),)
-  $(info Installing axplat-cargo...)
-  $(shell cargo install axplat-cargo)
+  $(info Installing cargo-axplat...)
+  $(shell cargo install cargo-axplat)
 endif
 
 # Tool to generate platform configuration files

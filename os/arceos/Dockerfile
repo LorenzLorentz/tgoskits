@@ -9,7 +9,7 @@ RUN apt-get update \
         pkg-config libglib2.0-dev git libslirp-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN cargo install cargo-binutils ax-config-gen axplat-cargo
+RUN cargo install cargo-binutils ax-config-gen cargo-axplat
 
 COPY rust-toolchain.toml /rust-toolchain.toml
 

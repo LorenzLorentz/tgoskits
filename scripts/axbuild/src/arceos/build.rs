@@ -649,12 +649,12 @@ fn ensure_cargo_axplat_installed() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    warn!("`cargo axplat` not found, installing `axplat-cargo` via cargo");
+    warn!("`cargo axplat` not found, installing `cargo-axplat` via cargo");
     Command::new("cargo")
         .arg("install")
-        .arg("axplat-cargo")
+        .arg("cargo-axplat")
         .exec()
-        .context("failed to install axplat-cargo")?;
+        .context("failed to install cargo-axplat")?;
     Ok(())
 }
 

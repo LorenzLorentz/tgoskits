@@ -244,7 +244,7 @@ CURATED_DOCS = {
     "ax-dma",
     "ax-input",
     "bwbench-client",
-    "axplat-cargo",
+    "cargo-axplat",
     "axplat-dyn",
     "ax-plat-aarch64-qemu-virt",
     "ax-plat-aarch64-peripherals",
@@ -1108,7 +1108,7 @@ def doc_style(pkg: Package) -> str:
         path_matches(pkg.rel_dir, "xtask/")
         or path_matches(pkg.rel_dir, "scripts/")
         or path_matches(pkg.rel_dir, "os/arceos/tools/")
-        or pkg.name == "axplat-cargo"
+        or pkg.name == "cargo-axplat"
     ):
         return "host_tool"
     if (
@@ -1199,8 +1199,8 @@ def style_command_block(pkg: Package) -> str | None:
             return "cargo xtask <test|arceos|starry>"
         if path_matches(pkg.rel_dir, "os/arceos/tools/"):
             return f'cargo run --manifest-path "{pkg.rel_dir}/Cargo.toml"'
-        if pkg.name == "axplat-cargo":
-            return 'cd "components/axplat_crates" && cargo run -p axplat-cargo -- <subcommand>'
+        if pkg.name == "cargo-axplat":
+            return 'cd "components/axplat_crates" && cargo run -p cargo-axplat -- <subcommand>'
         if pkg.has_bin and not pkg.has_lib:
             if pkg.workspace_root == REPO_ROOT:
                 return f"cargo run -p {pkg.name}"

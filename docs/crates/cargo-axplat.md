@@ -1,4 +1,4 @@
-# `axplat-cargo` 技术文档
+# `cargo-axplat` 技术文档
 
 > 路径：`components/axplat_crates/cargo-axplat`
 > 类型：二进制 crate
@@ -6,13 +6,13 @@
 > 版本：`0.2.5`
 > 文档依据：当前仓库源码、`Cargo.toml`、`README.md`、`template/*` 及 `os/arceos`/`os/StarryOS` 中的实际调用路径
 
-`axplat-cargo` 是一个宿主机侧 `cargo` 子命令，用来管理 `axplat` 平台包的三件事：生成平台包脚手架、把平台包依赖写入项目清单、在构建前定位平台包自带的 `axconfig.toml`。发布包名是 `axplat-cargo`，但安装后的二进制仍为 `cargo-axplat`，因此 `cargo axplat` 的使用方式保持不变。它本身不参与目标镜像运行，也不直接实现任何 `axplat` trait；真正的运行时平台实现仍在被创建或被查询的 `axplat-*` crate 中。
+`cargo-axplat` 是一个宿主机侧 `cargo` 子命令，用来管理 `axplat` 平台包的三件事：生成平台包脚手架、把平台包依赖写入项目清单、在构建前定位平台包自带的 `axconfig.toml`。它本身不参与目标镜像运行，也不直接实现任何 `axplat` trait；真正的运行时平台实现仍在被创建或被查询的 `axplat-*` crate 中。
 
 ## 1. 架构设计分析
 
 ### 1.1 设计定位
 
-`axplat-cargo` 在 `axplat` 体系中的职责可以概括为：
+`cargo-axplat` 在 `axplat` 体系中的职责可以概括为：
 
 - 向下：调用宿主机 `cargo new`、`cargo add`，并用 `cargo_metadata`、`toml_edit` 解析工程与配置文件。
 - 向上：为平台包开发者和上层构建脚本提供统一的 CLI。
@@ -37,7 +37,7 @@
 
 ### 1.3 命令分派与宿主机行为
 
-`axplat-cargo` 的入口非常薄：
+`cargo-axplat` 的入口非常薄：
 
 1. 用 `clap` 按 `cargo axplat <subcommand>` 的风格解析参数。
 2. 进入 `New`、`Add` 或 `Info` 三条分支。
@@ -49,18 +49,18 @@
 - 把子进程 `stderr` 原样转发出来。
 - 若子进程失败，直接用相同退出码退出当前进程。
 
-这说明 `axplat-cargo` 更像一个“标准化外壳”，而不是重新实现了一套 Cargo 功能。
+这说明 `cargo-axplat` 更像一个“标准化外壳”，而不是重新实现了一套 Cargo 功能。
 
 还有一个容易忽略的细节：
 
 - 安装后使用方式是 `cargo axplat ...`
-- 若在源码树里直接执行，则应写成 `cargo run -p axplat-cargo -- axplat ...`
+- 若在源码树里直接执行，则应写成 `cargo run -p cargo-axplat -- axplat ...`
 
 也就是说，源码内运行时 `axplat` 这个字面子命令仍然必须保留。
 
 ### 1.4 模板生成与平台实现装配
 
-`axplat-cargo` 最有价值的内部资产是 `template/`。它并不直接“实现平台”，而是把一个普通 `axplat-*` 平台包的骨架拼装出来：
+`cargo-axplat` 最有价值的内部资产是 `template/`。它并不直接“实现平台”，而是把一个普通 `axplat-*` 平台包的骨架拼装出来：
 
 | 模板文件 | 作用 | 生成后的意义 |
 | --- | --- | --- |
@@ -89,7 +89,7 @@
 
 ### 1.5 真实构建流程中的位置
 
-`axplat-cargo` 真正被上层项目使用的，不只是 `new` 和 `add`，还有 `info` 这一条宿主机构建链：
+`cargo-axplat` 真正被上层项目使用的，不只是 `new` 和 `add`，还有 `info` 这一条宿主机构建链：
 
 ```mermaid
 flowchart TD
@@ -112,13 +112,13 @@ flowchart TD
 4. 随后真正的配置合并由 `ax-config-gen` 完成，再写出 `.axconfig.toml`。
 5. 构建阶段通过 `AX_CONFIG_PATH` 把这个结果喂给平台包自身的 `build.rs` 与 `ax_config_macros::include_configs!`。
 
-因此 `axplat-cargo` 在构建流程中的角色是“定位配置来源”，而不是“生成最终配置”或“参与交叉编译”。
+因此 `cargo-axplat` 在构建流程中的角色是“定位配置来源”，而不是“生成最终配置”或“参与交叉编译”。
 
 ### 1.6 与 `axplat`、`ax-plat-macros` 和工具链的边界
 
-`axplat-cargo` 的边界要分三层看：
+`cargo-axplat` 的边界要分三层看：
 
-- 与 `axplat` 的边界：`axplat-cargo` 本身没有直接依赖 `axplat` 作为运行时库；它只是为将来依赖 `axplat` 的平台包写模板和清单。
+- 与 `axplat` 的边界：`cargo-axplat` 本身没有直接依赖 `axplat` 作为运行时库；它只是为将来依赖 `axplat` 的平台包写模板和清单。
 - 与 `ax-plat-macros` 的边界：生成模板只依赖 `axplat`，并通过 `axplat` 间接使用重导出的宏；工具自身从不直接链接 `ax-plat-macros`。
 - 与宿主机工具链的边界：它会调用 `cargo new`、`cargo add`、`cargo metadata`，但不会替你运行 `ax-config-gen`、`rustc` 交叉编译、QEMU 或其它镜像工具。
 
@@ -162,7 +162,7 @@ cargo axplat info axplat-aarch64-my-plat -c
 若在仓库源码里直接跑该工具，则应写成：
 
 ```bash
-cd "components/axplat_crates" && cargo run -p axplat-cargo -- axplat new /tmp/axplat-test --axplat-path "/path/to/axplat"
+cd "components/axplat_crates" && cargo run -p cargo-axplat -- axplat new /tmp/axplat-test --axplat-path "/path/to/axplat"
 ```
 
 这里的隐藏参数 `--axplat-path` 主要用于本地开发或 CI，让新生成的模板依赖工作区内的 `axplat` 路径版，而不是 crates.io 版本。
@@ -206,7 +206,7 @@ cd "components/axplat_crates" && cargo run -p axplat-cargo -- axplat new /tmp/ax
 
 ```mermaid
 graph TD
-    A[clap / cargo_metadata / toml_edit] --> B[axplat-cargo]
+    A[clap / cargo_metadata / toml_edit] --> B[cargo-axplat]
     B --> C[生成的 axplat-* 平台包骨架]
     B --> D[项目 Cargo.toml 依赖项]
     B --> E[构建脚本对 config_path 的查询]
@@ -243,11 +243,11 @@ graph TD
 
 ### 5.1 当前仓库里的实际验证面
 
-当前 `axplat_crates` 子工作区已经对 `axplat-cargo` 做了三类有效验证：
+当前 `axplat_crates` 子工作区已经对 `cargo-axplat` 做了三类有效验证：
 
-- `cargo clippy -p axplat-cargo`
-- `cargo build -p axplat-cargo`
-- 用 `cargo run -p axplat-cargo -- axplat new ... --axplat-path ...` 生成模板工程，再对生成结果执行 `cargo check`
+- `cargo clippy -p cargo-axplat`
+- `cargo build -p cargo-axplat`
+- 用 `cargo run -p cargo-axplat -- axplat new ... --axplat-path ...` 生成模板工程，再对生成结果执行 `cargo check`
 
 这说明仓库真正关心的不是“命令输出长什么样”，而是“模板能否成功生成且至少能编译检查通过”。
 
@@ -274,4 +274,4 @@ graph TD
 
 ## 7. 总结
 
-`axplat-cargo` 的真正价值不在“帮你写了几个命令别名”，而在它把 `axplat` 平台包的宿主机生命周期标准化了：先用模板生成一个结构正确的骨架，再把这个平台包接到项目依赖里，最后在构建前准确找回它的 `axconfig.toml`。它不实现平台、不参与运行时，也不替代 `ax-config-gen`；它负责的是平台包开发和构建链之间那段最容易散乱的 glue。
+`cargo-axplat` 的真正价值不在“帮你写了几个命令别名”，而在它把 `axplat` 平台包的宿主机生命周期标准化了：先用模板生成一个结构正确的骨架，再把这个平台包接到项目依赖里，最后在构建前准确找回它的 `axconfig.toml`。它不实现平台、不参与运行时，也不替代 `ax-config-gen`；它负责的是平台包开发和构建链之间那段最容易散乱的 glue。

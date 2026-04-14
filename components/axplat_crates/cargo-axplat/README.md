@@ -1,11 +1,11 @@
-<h1 align="center">axplat-cargo</h1>
+<h1 align="center">cargo-axplat</h1>
 
 <p align="center">Manages hardware platform packages using `axplat`</p>
 
 <div align="center">
 
-[![Crates.io](https://img.shields.io/crates/v/axplat-cargo.svg)](https://crates.io/crates/axplat-cargo)
-[![Docs.rs](https://docs.rs/axplat-cargo/badge.svg)](https://docs.rs/axplat-cargo)
+[![Crates.io](https://img.shields.io/crates/v/cargo-axplat.svg)](https://crates.io/crates/cargo-axplat)
+[![Docs.rs](https://docs.rs/cargo-axplat/badge.svg)](https://docs.rs/cargo-axplat)
 [![Rust](https://img.shields.io/badge/edition-2024-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 
@@ -15,7 +15,7 @@ English | [中文](README_CN.md)
 
 # Introduction
 
-`axplat-cargo` provides Manages hardware platform packages using `axplat`. It is maintained as part of the TGOSKits component set and is intended for Rust projects that integrate with ArceOS, AxVisor, or related low-level systems software. The installed binary remains `cargo-axplat`, so `cargo axplat` continues to work.
+`cargo-axplat` provides Manages hardware platform packages using `axplat`. It is maintained as part of the TGOSKits component set and is intended for Rust projects that integrate with ArceOS, AxVisor, or related low-level systems software.
 
 ## Quick Start
 
@@ -25,7 +25,7 @@ Add this crate to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-axplat-cargo = "0.4.5"
+cargo-axplat = "0.4.5"
 ```
 
 ### Run Check and Test
@@ -55,7 +55,7 @@ cargo doc --no-deps
 use cargo_axplat as _;
 
 fn main() {
-    // Integrate `axplat-cargo` into your project here.
+    // Integrate `cargo-axplat` into your project here.
 }
 ```
 
@@ -67,7 +67,7 @@ Generate and view API documentation:
 cargo doc --no-deps --open
 ```
 
-Online documentation: [docs.rs/axplat-cargo](https://docs.rs/axplat-cargo)
+Online documentation: [docs.rs/cargo-axplat](https://docs.rs/cargo-axplat)
 
 # Contributing
 

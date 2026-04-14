@@ -350,7 +350,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "axplat-cargo"
+name = "cargo-axplat"
 version = "0.2.5"
 dependencies = [
  "cargo_metadata",
