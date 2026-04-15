@@ -6626,7 +6626,7 @@ dependencies = [
 
 [[package]]
 name = "rsext4"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "bitflags 2.11.1",
  "lazy_static",

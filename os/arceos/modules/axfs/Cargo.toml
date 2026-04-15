@@ -23,7 +23,7 @@ ax-io = { workspace = true, features = ["alloc"] }
 ax-cap-access = "0.3.0"
 ax-lazyinit = "0.4.2"
 log = { workspace = true }
-rsext4 = "0.3.0"
+rsext4 = "0.3.1"
 spin = { workspace = true }
 
 [dependencies.axfatfs]

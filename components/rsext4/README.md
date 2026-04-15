@@ -25,7 +25,7 @@ Add this crate to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rsext4 = "0.3.0"
+rsext4 = "0.3.1"
 ```
 
 ### Run Check and Test

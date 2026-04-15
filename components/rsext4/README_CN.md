@@ -25,7 +25,7 @@
 
 ```toml
 [dependencies]
-rsext4 = "0.3.0"
+rsext4 = "0.3.1"
 ```
 
 ### 检查与测试
