@@ -26,6 +26,7 @@ qemu.log
 .devspace/
 
 /Cargo.toml.bk
+**/Cargo.lock
 
 # tools should be downloaded from github
 tools/*
