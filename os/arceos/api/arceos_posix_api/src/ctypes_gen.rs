@@ -644,11 +644,11 @@ const _: () = {
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct pthread_mutex_t {
-    pub __l: [::core::ffi::c_long; 1usize],
+    pub __l: [::core::ffi::c_long; 6usize],
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of pthread_mutex_t"][::core::mem::size_of::<pthread_mutex_t>() - 8usize];
+    ["Size of pthread_mutex_t"][::core::mem::size_of::<pthread_mutex_t>() - 48usize];
     ["Alignment of pthread_mutex_t"][::core::mem::align_of::<pthread_mutex_t>() - 8usize];
     ["Offset of field: pthread_mutex_t::__l"]
         [::core::mem::offset_of!(pthread_mutex_t, __l) - 0usize];

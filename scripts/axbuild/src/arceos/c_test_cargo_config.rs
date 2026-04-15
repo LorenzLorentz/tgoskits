@@ -91,8 +91,8 @@ fn discover_patch_paths(
 ) -> anyhow::Result<BTreeMap<String, PathBuf>> {
     let root_patch_paths = root_patch_paths(workspace_root)?;
     let repo_local_packages = discover_repo_local_packages(workspace_root)?;
-    let registry_dependency_names =
-        registry_dependency_names_in_workspace(&arceos_dir.join("Cargo.toml"))?;
+    let workspace_manifest = workspace_root.join("Cargo.toml");
+    let registry_dependency_names = registry_dependency_names_in_workspace(&workspace_manifest)?;
     let mut patches = BTreeMap::new();
 
     for (crate_name, package_dir) in &root_patch_paths {
