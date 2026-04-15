@@ -3,15 +3,14 @@ use core::{
     ffi::c_int,
     hint::likely,
     sync::atomic::{AtomicBool, Ordering},
-    task::Context,
 };
 
 use ax_errno::{AxError, AxResult};
 use ax_fs::{FS_CONTEXT, FsContext};
 use ax_sync::Mutex;
-use ax_task::future::{block_on, poll_io};
+use ax_task::wait_io;
 use axfs_ng_vfs::{Location, Metadata, NodeFlags};
-use axpoll::{IoEvents, Pollable};
+use axpoll::{IoEvents, PollTable, Pollable};
 use linux_raw_sys::general::{AT_EMPTY_PATH, AT_FDCWD, AT_SYMLINK_NOFOLLOW};
 
 use super::{FileLike, Kstat, get_file_like};
@@ -130,9 +129,9 @@ impl FileLike for File {
         if likely(self.is_blocking()) {
             inner.read(dst)
         } else {
-            block_on(poll_io(self, IoEvents::IN, self.nonblocking(), || {
+            wait_io(self, IoEvents::IN, self.nonblocking(), None, true, || {
                 inner.read(&mut *dst)
-            }))
+            })
         }
     }
 
@@ -141,9 +140,9 @@ impl FileLike for File {
         if likely(self.is_blocking()) {
             inner.write(src)
         } else {
-            block_on(poll_io(self, IoEvents::OUT, self.nonblocking(), || {
+            wait_io(self, IoEvents::OUT, self.nonblocking(), None, true, || {
                 inner.write(&mut *src)
-            }))
+            })
         }
     }
 
@@ -186,8 +185,8 @@ impl Pollable for File {
         self.inner().location().poll()
     }
 
-    fn register(&self, context: &mut Context<'_>, events: IoEvents) {
-        self.inner().location().register(context, events);
+    fn poll_wait(&self, events: IoEvents, table: &mut PollTable) {
+        self.inner().location().poll_wait(events, table);
     }
 }
 
@@ -239,5 +238,5 @@ impl Pollable for Directory {
         IoEvents::IN | IoEvents::OUT
     }
 
-    fn register(&self, _context: &mut Context<'_>, _events: IoEvents) {}
+    fn poll_wait(&self, _events: IoEvents, _table: &mut PollTable) {}
 }

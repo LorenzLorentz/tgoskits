@@ -215,20 +215,66 @@ impl<R: TtyRead, W: TtyWrite> Pollable for Tty<R, W> {
 }
 
 pub struct CurrentTty;
+
+fn with_current_terminal<R>(f: impl FnOnce(&dyn DeviceOps) -> AxResult<R>) -> AxResult<R> {
+    let curr = current();
+    let proc = &curr.as_thread().proc_data.proc;
+    let terminal = proc
+        .group()
+        .session()
+        .terminal()
+        .ok_or(AxError::OperationNotPermitted)?;
+
+    if let Some(tty) = terminal.as_ref().downcast_ref::<NTtyDriver>() {
+        return f(tty);
+    }
+    if let Some(tty) = terminal.as_ref().downcast_ref::<PtyDriver>() {
+        return f(tty);
+    }
+
+    Err(AxError::OperationNotPermitted)
+}
+
 impl DeviceOps for CurrentTty {
-    fn read_at(&self, _buf: &mut [u8], _offset: u64) -> AxResult<usize> {
-        unreachable!()
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> AxResult<usize> {
+        with_current_terminal(|tty| tty.read_at(buf, offset))
     }
 
-    fn write_at(&self, _buf: &[u8], _offset: u64) -> AxResult<usize> {
-        Ok(0)
+    fn write_at(&self, buf: &[u8], offset: u64) -> AxResult<usize> {
+        with_current_terminal(|tty| tty.write_at(buf, offset))
     }
 
-    fn ioctl(&self, _cmd: u32, _arg: usize) -> AxResult<usize> {
-        unreachable!()
+    fn ioctl(&self, cmd: u32, arg: usize) -> AxResult<usize> {
+        with_current_terminal(|tty| tty.ioctl(cmd, arg))
     }
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn as_pollable(&self) -> Option<&dyn Pollable> {
+        Some(self)
+    }
+}
+
+impl Pollable for CurrentTty {
+    fn poll(&self) -> IoEvents {
+        with_current_terminal(|tty| {
+            if let Some(pollable) = tty.as_pollable() {
+                Ok(pollable.poll())
+            } else {
+                Ok(IoEvents::IN | IoEvents::OUT)
+            }
+        })
+        .unwrap_or(IoEvents::empty())
+    }
+
+    fn register(&self, context: &mut Context<'_>, events: IoEvents) {
+        let _ = with_current_terminal(|tty| {
+            if let Some(pollable) = tty.as_pollable() {
+                pollable.register(context, events);
+            }
+            Ok(())
+        });
     }
 }

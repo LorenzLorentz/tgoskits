@@ -1,7 +1,9 @@
 use alloc::{sync::Arc, vec::Vec};
 
 use ax_driver_base::{BaseDriverOps, DevError, DevResult, DeviceType};
-use ax_driver_net::{EthernetAddress, NetBuf, NetBufBox, NetBufPool, NetBufPtr, NetDriverOps};
+use ax_driver_net::{
+    EthernetAddress, NetBuf, NetBufBox, NetBufPool, NetBufPtr, NetDriverOps, NetIrqEvents,
+};
 use virtio_drivers::{Hal, device::net::VirtIONetRaw as InnerDev, transport::Transport};
 
 use crate::as_dev_err;
@@ -197,5 +199,12 @@ impl<H: Hal, T: Transport, const QS: usize> NetDriverOps for VirtIoNetDev<H, T, 
 
         // 2. Return the buffer.
         Ok(net_buf.into_buf_ptr())
+    }
+
+    fn set_irq_enabled(&mut self, _enabled: bool) {}
+
+    fn handle_irq(&mut self) -> NetIrqEvents {
+        self.inner.ack_interrupt();
+        NetIrqEvents::RX | NetIrqEvents::TX
     }
 }

@@ -409,7 +409,6 @@ impl Starry {
         )
         .await
     }
-
     async fn run_build_request(&mut self, request: ResolvedStarryRequest) -> anyhow::Result<()> {
         command_flow::run_build(&mut self.app, request, build::load_cargo_config).await
     }

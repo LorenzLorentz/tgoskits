@@ -1,19 +1,16 @@
-//! A library for polling I/O events and waking up tasks.
+//! A library for polling I/O events and waking up blocked tasks.
 
 #![no_std]
 #![deny(missing_docs)]
 
 extern crate alloc;
 
-use alloc::{boxed::Box, sync::Arc, task::Wake};
-use core::{
-    mem::MaybeUninit,
-    task::{Context, Waker},
-};
+use alloc::{sync::Arc, task::Wake};
+use core::task::{Context, Waker};
 
 use bitflags::bitflags;
 use linux_raw_sys::general::*;
-use spin::{Lazy, Mutex};
+use spin::Mutex;
 
 bitflags! {
     /// I/O events.
@@ -54,106 +51,113 @@ bitflags! {
     }
 }
 
-/// Trait for types that can be polled for I/O events.
-pub trait Pollable {
-    /// Polls for I/O events.
-    fn poll(&self) -> IoEvents;
-
-    /// Registers wakers for I/O events.
-    fn register(&self, context: &mut Context<'_>, events: IoEvents);
+/// Waiter object used by [`PollWaitQueue`].
+pub trait PollWaiter: Send + Sync {
+    /// Wake the blocked task represented by this waiter.
+    fn wake(&self);
 }
 
-const POLL_SET_CAPACITY: usize = 64;
+/// A queue of task-native waiters.
+pub struct PollWaitQueue(Mutex<alloc::vec::Vec<Arc<dyn PollWaiter>>>);
 
-struct Inner {
-    entries: Box<[MaybeUninit<Waker>]>,
-    cursor: usize,
-}
-
-impl Inner {
-    fn new() -> Self {
-        Self {
-            entries: Box::new_uninit_slice(POLL_SET_CAPACITY),
-            cursor: 0,
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.cursor.min(POLL_SET_CAPACITY)
-    }
-
-    fn is_empty(&self) -> bool {
-        self.cursor == 0
-    }
-
-    fn register(&mut self, waker: &Waker) {
-        let slot = self.cursor % POLL_SET_CAPACITY;
-        if self.cursor >= POLL_SET_CAPACITY {
-            let old = unsafe { self.entries[slot].assume_init_read() };
-            if !old.will_wake(waker) {
-                old.wake();
-            }
-            self.cursor = ((slot + 1) % POLL_SET_CAPACITY) + POLL_SET_CAPACITY;
-        } else {
-            self.cursor += 1;
-        }
-        self.entries[slot].write(waker.clone());
-    }
-}
-
-impl Drop for Inner {
-    fn drop(&mut self) {
-        for i in 0..self.len() {
-            unsafe { self.entries[i].assume_init_read() }.wake();
-        }
-    }
-}
-
-/// A data structure for waking up tasks that are waiting for I/O events.
-pub struct PollSet(Lazy<Mutex<Inner>>);
-
-impl Default for PollSet {
+impl Default for PollWaitQueue {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl PollSet {
-    /// Creates a new empty [`PollSet`].
+impl PollWaitQueue {
+    /// Creates a new empty queue.
     pub const fn new() -> Self {
-        Self(Lazy::new(|| Mutex::new(Inner::new())))
+        Self(Mutex::new(alloc::vec::Vec::new()))
     }
 
-    /// Registers a waker.
+    /// Registers the current waiter from the poll table.
+    pub fn wait(&self, table: &mut PollTable) {
+        self.0.lock().push(table.waiter.clone());
+    }
+
+    /// Registers a legacy [`Waker`] directly.
+    pub fn register_waker(&self, waker: &Waker) {
+        self.0.lock().push(Arc::new(WakerWaiter(waker.clone())));
+    }
+
+    /// Legacy compatibility wrapper.
     pub fn register(&self, waker: &Waker) {
-        self.0.lock().register(waker);
+        self.register_waker(waker);
     }
 
-    /// Wakes up all registered wakers.
+    /// Wakes all registered waiters.
     pub fn wake(&self) -> usize {
-        let mut guard = self.0.lock();
-        if guard.is_empty() {
-            return 0;
+        let entries = {
+            let mut guard = self.0.lock();
+            if guard.is_empty() {
+                return 0;
+            }
+            core::mem::take(&mut *guard)
+        };
+        let len = entries.len();
+        for waiter in entries {
+            waiter.wake();
         }
-        let inner = core::mem::replace(&mut *guard, Inner::new());
-        drop(guard);
-        inner.len()
+        len
     }
 }
 
-impl Drop for PollSet {
-    fn drop(&mut self) {
-        // Ensure all entries are dropped
-        self.wake();
+/// Backward-compatible alias name kept for existing users while the codebase
+/// migrates away from the old Waker-based API.
+pub type PollSet = PollWaitQueue;
+
+/// Registration context used during one blocking poll attempt.
+pub struct PollTable {
+    waiter: Arc<dyn PollWaiter>,
+}
+
+impl PollTable {
+    /// Creates a new poll table for the given waiter.
+    pub fn new(waiter: Arc<dyn PollWaiter>) -> Self {
+        Self { waiter }
+    }
+
+    /// Creates a poll table backed by a legacy [`Waker`].
+    pub fn from_waker(waker: &Waker) -> Self {
+        Self::new(Arc::new(WakerWaiter(waker.clone())))
     }
 }
 
-impl Wake for PollSet {
+/// Trait for types that can be polled for I/O events.
+pub trait Pollable {
+    /// Polls for current I/O events.
+    fn poll(&self) -> IoEvents;
+
+    /// Registers the current waiter for the given events.
+    fn poll_wait(&self, events: IoEvents, table: &mut PollTable) {
+        let waker = Waker::from(Arc::new(PollWaiterWake(table.waiter.clone())));
+        let mut context = Context::from_waker(&waker);
+        self.register(&mut context, events);
+    }
+
+    /// Legacy Waker-based registration entry point kept as a compatibility
+    /// layer while the tree migrates to [`Self::poll_wait`].
+    fn register(&self, _context: &mut Context<'_>, _events: IoEvents) {}
+}
+
+struct WakerWaiter(Waker);
+
+impl PollWaiter for WakerWaiter {
+    fn wake(&self) {
+        self.0.wake_by_ref();
+    }
+}
+
+struct PollWaiterWake(Arc<dyn PollWaiter>);
+
+impl Wake for PollWaiterWake {
     fn wake(self: Arc<Self>) {
-        self.as_ref().wake();
+        self.0.wake();
     }
 
     fn wake_by_ref(self: &Arc<Self>) {
-        self.as_ref().wake();
+        self.0.wake();
     }
 }

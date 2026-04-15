@@ -4,8 +4,12 @@ use alloc::{
     string::String,
     sync::{Arc, Weak},
 };
+use core::time::Duration;
 
+use ax_errno::{AxError, AxResult};
 use ax_kernel_guard::NoPreemptIrqSave;
+use ax_kspin::SpinNoIrq;
+use axpoll::{IoEvents, PollTable, PollWaiter, Pollable};
 
 pub(crate) use crate::run_queue::{current_run_queue, select_run_queue};
 #[cfg_attr(doc, doc(cfg(all(feature = "multitask", feature = "task-ext"))))]
@@ -249,6 +253,170 @@ pub fn sleep_until(deadline: ax_hal::time::TimeValue) {
     current_run_queue::<NoPreemptIrqSave>().sleep_until(deadline);
     #[cfg(not(feature = "irq"))]
     ax_hal::time::busy_wait_until(deadline);
+}
+
+struct TaskPollWaiter {
+    task: WeakAxTaskRef,
+    woke: SpinNoIrq<bool>,
+}
+
+impl TaskPollWaiter {
+    fn new(task: &AxTaskRef) -> Arc<Self> {
+        Arc::new(Self {
+            task: Arc::downgrade(task),
+            woke: SpinNoIrq::new(false),
+        })
+    }
+}
+
+impl PollWaiter for TaskPollWaiter {
+    fn wake(&self) {
+        if let Some(task) = self.task.upgrade() {
+            let mut rq = select_run_queue::<NoPreemptIrqSave>(&task);
+            *self.woke.lock() = true;
+            rq.unblock_task(task, false);
+        }
+    }
+}
+
+fn wait_registered_event(
+    waiter: &Arc<TaskPollWaiter>,
+    #[cfg(feature = "irq")] deadline: Option<ax_hal::time::TimeValue>,
+    #[cfg(not(feature = "irq"))] _deadline: Option<ax_hal::time::TimeValue>,
+) -> AxResult<()> {
+    #[cfg(feature = "irq")]
+    let curr = current();
+
+    #[cfg(feature = "irq")]
+    if let Some(deadline) = deadline {
+        if ax_hal::time::wall_time() >= deadline {
+            return Err(AxError::TimedOut);
+        }
+        crate::timers::set_alarm_wakeup(deadline, curr.clone());
+    }
+
+    let mut rq = current_run_queue::<NoPreemptIrqSave>();
+    let mut woke = waiter.woke.lock();
+    if !*woke {
+        rq.waiter_blocked_resched(woke);
+    } else {
+        *woke = false;
+        drop(woke);
+        drop(rq);
+        yield_now_unchecked();
+    }
+
+    #[cfg(feature = "irq")]
+    if deadline.is_some() {
+        curr.timer_ticket_expired();
+        if let Some(deadline) = deadline
+            && ax_hal::time::wall_time() >= deadline
+        {
+            return Err(AxError::TimedOut);
+        }
+    }
+
+    Ok(())
+}
+
+/// Sleeps until the given deadline or until the current task is interrupted.
+#[cfg(feature = "irq")]
+pub fn schedule_timeout_interruptible(
+    deadline: ax_hal::time::TimeValue,
+) -> Result<(), crate::future::Interrupted> {
+    might_sleep();
+
+    let curr = current().clone();
+    if curr.take_interrupt() {
+        return Err(crate::future::Interrupted);
+    }
+
+    let waiter = TaskPollWaiter::new(&curr);
+    let waiter_dyn: Arc<dyn PollWaiter> = waiter.clone();
+    let mut table = PollTable::new(waiter_dyn);
+    curr.poll_wait_interrupt(&mut table);
+
+    if curr.take_interrupt() {
+        return Err(crate::future::Interrupted);
+    }
+
+    match wait_registered_event(&waiter, Some(deadline)) {
+        Ok(()) => {
+            if curr.take_interrupt() {
+                Err(crate::future::Interrupted)
+            } else {
+                Ok(())
+            }
+        }
+        Err(AxError::TimedOut) => Ok(()),
+        Err(_) => Ok(()),
+    }
+}
+
+/// Sleeps until the deadline.
+#[cfg(feature = "irq")]
+pub fn schedule_timeout(deadline: ax_hal::time::TimeValue) {
+    might_sleep();
+    current_run_queue::<NoPreemptIrqSave>().sleep_until(deadline);
+}
+
+/// Synchronous poll helper built on task-native waiters.
+pub fn wait_io<P: Pollable, F: FnMut() -> AxResult<T>, T>(
+    pollable: &P,
+    events: IoEvents,
+    non_blocking: bool,
+    timeout: Option<Duration>,
+    interruptible: bool,
+    mut f: F,
+) -> AxResult<T> {
+    might_sleep();
+
+    let curr = current().clone();
+    #[cfg(feature = "irq")]
+    let deadline = timeout.map(|dur| ax_hal::time::wall_time() + dur);
+    #[cfg(not(feature = "irq"))]
+    let deadline = timeout.map(|dur| ax_hal::time::wall_time() + dur);
+
+    loop {
+        if interruptible && curr.take_interrupt() {
+            return Err(AxError::Interrupted);
+        }
+
+        match f() {
+            Ok(value) => return Ok(value),
+            Err(AxError::WouldBlock) if non_blocking => return Err(AxError::WouldBlock),
+            Err(AxError::WouldBlock) => {}
+            Err(err) => return Err(err),
+        }
+
+        #[cfg(feature = "irq")]
+        if let Some(deadline) = deadline
+            && ax_hal::time::wall_time() >= deadline
+        {
+            return Err(AxError::TimedOut);
+        }
+
+        let waiter = TaskPollWaiter::new(&curr);
+        let waiter_dyn: Arc<dyn PollWaiter> = waiter.clone();
+        let mut table = PollTable::new(waiter_dyn);
+        pollable.poll_wait(events, &mut table);
+        if interruptible {
+            curr.poll_wait_interrupt(&mut table);
+        }
+
+        if interruptible && curr.take_interrupt() {
+            return Err(AxError::Interrupted);
+        }
+
+        match f() {
+            Ok(value) => return Ok(value),
+            Err(AxError::WouldBlock) if non_blocking => return Err(AxError::WouldBlock),
+            Err(AxError::WouldBlock) => {}
+            Err(err) => return Err(err),
+        }
+
+        wait_registered_event(&waiter, deadline)?;
+    }
 }
 
 /// Exits the current task.

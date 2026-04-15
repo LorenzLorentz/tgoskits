@@ -1,8 +1,6 @@
 use alloc::{string::String, vec};
-use core::task::Waker;
 
 use ax_driver::prelude::*;
-use ax_task::future::register_irq_waker;
 use hashbrown::HashMap;
 use smoltcp::{
     storage::{PacketBuffer, PacketMetadata},
@@ -261,6 +259,54 @@ impl Device for EthernetDevice {
         &self.name
     }
 
+    fn irq_num(&self) -> Option<usize> {
+        self.inner.irq_num()
+    }
+
+    fn set_irq_enabled(&mut self, enabled: bool) {
+        self.inner.set_irq_enabled(enabled);
+        if let Some(irq) = self.inner.irq_num() {
+            ax_hal::irq::set_enable(irq, enabled);
+        }
+    }
+
+    fn handle_irq(&mut self) -> NetIrqEvents {
+        self.inner.handle_irq()
+    }
+
+    fn poll_rx(
+        &mut self,
+        budget: usize,
+        buffer: &mut PacketBuffer<()>,
+        timestamp: Instant,
+    ) -> DevResult<NetPollStatus> {
+        let mut status = NetPollStatus::default();
+        for _ in 0..budget {
+            let rx_buf = match self.inner.receive() {
+                Ok(buf) => buf,
+                Err(DevError::Again) => break,
+                Err(err) => return Err(err),
+            };
+            let rx_buf = unsafe { NetBuf::from_buf_ptr(rx_buf) };
+            let result = self.handle_frame(rx_buf.packet(), buffer, timestamp);
+            self.inner.recycle_rx_buffer(rx_buf.into_buf_ptr())?;
+            if result {
+                status.work_done += 1;
+                status.rx_done += 1;
+            }
+        }
+        status.more_rx = self.inner.can_receive();
+        Ok(status)
+    }
+
+    fn poll_tx(&mut self, budget: usize) -> DevResult<NetPollStatus> {
+        self.inner.poll_tx(budget)
+    }
+
+    fn link_state(&self) -> NetLinkState {
+        self.inner.link_state()
+    }
+
     fn recv(&mut self, buffer: &mut PacketBuffer<()>, timestamp: Instant) -> bool {
         loop {
             let rx_buf = match self.inner.receive() {
@@ -299,20 +345,17 @@ impl Device for EthernetDevice {
         }
 
         let need_request = match self.neighbors.get(&next_hop) {
-            Some(Some(neighbor)) => {
-                if neighbor.expires_at > timestamp {
-                    Self::send_to(
-                        &mut self.inner,
-                        neighbor.hardware_address,
-                        packet.len(),
-                        |buf| buf.copy_from_slice(packet),
-                        EthernetProtocol::Ipv4,
-                    );
-                    return false;
-                } else {
-                    true
-                }
+            Some(Some(neighbor)) if neighbor.expires_at > timestamp => {
+                Self::send_to(
+                    &mut self.inner,
+                    neighbor.hardware_address,
+                    packet.len(),
+                    |buf| buf.copy_from_slice(packet),
+                    EthernetProtocol::Ipv4,
+                );
+                return false;
             }
+            Some(Some(_neighbor)) => true,
             // Request already sent
             Some(None) => false,
             None => true,
@@ -331,11 +374,5 @@ impl Device for EthernetDevice {
         };
         dst_buffer.copy_from_slice(packet);
         false
-    }
-
-    fn register_waker(&self, waker: &Waker) {
-        if let Some(irq) = self.inner.irq_num() {
-            register_irq_waker(irq, waker);
-        }
     }
 }

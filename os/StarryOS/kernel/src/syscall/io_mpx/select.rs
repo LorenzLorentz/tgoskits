@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::{fmt, time::Duration};
 
 use ax_errno::{AxError, AxResult};
-use ax_task::future::{self, block_on, poll_io};
+use ax_task::wait_io;
 use axpoll::IoEvents;
 use bitmaps::Bitmap;
 use linux_raw_sys::{
@@ -108,40 +108,38 @@ fn do_select(
         unsafe { FD_ZERO(exceptfds) };
     }
     with_blocked_signals(sigmask.copied(), || {
-        match block_on(future::timeout(
-            timeout,
-            poll_io(&fds, IoEvents::empty(), false, || {
-                let mut res = 0usize;
-                for ((fd, interested), index) in fds.0.iter().zip(fd_indices.iter().copied()) {
-                    let events = fd.poll() & *interested;
-                    if events.contains(IoEvents::IN)
-                        && let Some(set) = readfds.as_deref_mut()
-                    {
-                        res += 1;
-                        unsafe { FD_SET(index as _, set) };
-                    }
-                    if events.contains(IoEvents::OUT)
-                        && let Some(set) = writefds.as_deref_mut()
-                    {
-                        res += 1;
-                        unsafe { FD_SET(index as _, set) };
-                    }
-                    if events.contains(IoEvents::ERR)
-                        && let Some(set) = exceptfds.as_deref_mut()
-                    {
-                        res += 1;
-                        unsafe { FD_SET(index as _, set) };
-                    }
+        match wait_io(&fds, IoEvents::empty(), false, timeout, true, || {
+            let mut res = 0usize;
+            for ((fd, interested), index) in fds.0.iter().zip(fd_indices.iter().copied()) {
+                let events = fd.poll() & *interested;
+                if events.contains(IoEvents::IN)
+                    && let Some(set) = readfds.as_deref_mut()
+                {
+                    res += 1;
+                    unsafe { FD_SET(index as _, set) };
                 }
-                if res > 0 {
-                    return Ok(res as _);
+                if events.contains(IoEvents::OUT)
+                    && let Some(set) = writefds.as_deref_mut()
+                {
+                    res += 1;
+                    unsafe { FD_SET(index as _, set) };
                 }
+                if events.contains(IoEvents::ERR)
+                    && let Some(set) = exceptfds.as_deref_mut()
+                {
+                    res += 1;
+                    unsafe { FD_SET(index as _, set) };
+                }
+            }
+            if res > 0 {
+                return Ok(res as _);
+            }
 
-                Err(AxError::WouldBlock)
-            }),
-        )) {
-            Ok(r) => r,
-            Err(_) => Ok(0),
+            Err(AxError::WouldBlock)
+        }) {
+            Ok(r) => Ok(r),
+            Err(AxError::TimedOut) => Ok(0),
+            Err(err) => Err(err),
         }
     })
 }

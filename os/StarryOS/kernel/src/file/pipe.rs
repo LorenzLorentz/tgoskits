@@ -2,17 +2,13 @@ use alloc::{borrow::Cow, format, sync::Arc};
 use core::{
     mem,
     sync::atomic::{AtomicBool, Ordering},
-    task::Context,
 };
 
 use ax_errno::{AxError, AxResult};
 use ax_memory_addr::PAGE_SIZE_4K;
 use ax_sync::Mutex;
-use ax_task::{
-    current,
-    future::{block_on, poll_io},
-};
-use axpoll::{IoEvents, PollSet, Pollable};
+use ax_task::{current, wait_io};
+use axpoll::{IoEvents, PollSet, PollTable, Pollable};
 use linux_raw_sys::{general::S_IFIFO, ioctl::FIONREAD};
 use ringbuf::{
     HeapRb,
@@ -120,7 +116,7 @@ impl FileLike for Pipe {
             return Ok(0);
         }
 
-        block_on(poll_io(self, IoEvents::IN, self.nonblocking(), || {
+        wait_io(self, IoEvents::IN, self.nonblocking(), None, true, || {
             let read = {
                 let cons = self.shared.buffer.lock();
                 let (left, right) = cons.as_slices();
@@ -139,7 +135,7 @@ impl FileLike for Pipe {
             } else {
                 Err(AxError::WouldBlock)
             }
-        }))
+        })
     }
 
     fn write(&self, src: &mut IoSrc) -> AxResult<usize> {
@@ -153,7 +149,7 @@ impl FileLike for Pipe {
 
         let mut total_written = 0;
 
-        block_on(poll_io(self, IoEvents::OUT, self.nonblocking(), || {
+        wait_io(self, IoEvents::OUT, self.nonblocking(), None, true, || {
             if self.closed() {
                 raise_pipe();
                 return Err(AxError::BrokenPipe);
@@ -177,7 +173,7 @@ impl FileLike for Pipe {
                 }
             }
             Err(AxError::WouldBlock)
-        }))
+        })
     }
 
     fn stat(&self) -> AxResult<Kstat> {
@@ -224,13 +220,13 @@ impl Pollable for Pipe {
         events
     }
 
-    fn register(&self, context: &mut Context<'_>, events: IoEvents) {
+    fn poll_wait(&self, events: IoEvents, table: &mut PollTable) {
         if events.contains(IoEvents::IN) {
-            self.shared.poll_rx.register(context.waker());
+            self.shared.poll_rx.wait(table);
         }
         if events.contains(IoEvents::OUT) {
-            self.shared.poll_tx.register(context.waker());
+            self.shared.poll_tx.wait(table);
         }
-        self.shared.poll_close.register(context.waker());
+        self.shared.poll_close.wait(table);
     }
 }

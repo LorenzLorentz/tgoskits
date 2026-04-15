@@ -5,6 +5,8 @@
 
 extern crate alloc;
 
+use core::cmp;
+
 #[cfg(feature = "fxmac")]
 /// fxmac driver for PhytiumPi
 pub mod fxmac;
@@ -17,9 +19,53 @@ pub use ax_driver_base::{BaseDriverOps, DevError, DevResult, DeviceType};
 
 mod net_buf;
 pub use self::net_buf::{NetBuf, NetBufBox, NetBufPool, NetBufPtr};
+use bitflags::bitflags;
 
 /// The ethernet address of the NIC (MAC address).
 pub struct EthernetAddress(pub [u8; 6]);
+
+bitflags! {
+    /// Event bits returned from the IRQ top half of a NIC.
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct NetIrqEvents: u32 {
+        /// Receive work is pending.
+        const RX = 1 << 0;
+        /// Transmit completion work is pending.
+        const TX = 1 << 1;
+        /// Link state changed.
+        const LINK = 1 << 2;
+        /// Device error needs service.
+        const ERR = 1 << 3;
+    }
+}
+
+/// Link state reported by a NIC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetLinkState {
+    /// The link is up.
+    Up,
+    /// The link is down.
+    Down,
+    /// The driver cannot currently determine the state.
+    Unknown,
+}
+
+/// Result of one bottom-half polling round.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NetPollStatus {
+    /// Total amount of work completed during this round.
+    pub work_done: usize,
+    /// Number of RX packets drained.
+    pub rx_done: usize,
+    /// Number of TX completions reclaimed.
+    pub tx_done: usize,
+    /// Whether more RX work is pending.
+    pub more_rx: bool,
+    /// Whether more TX work is pending.
+    pub more_tx: bool,
+    /// Whether link state changed while polling.
+    pub link_changed: bool,
+}
 
 /// Operations that require a network device (NIC) driver to implement.
 pub trait NetDriverOps: BaseDriverOps {
@@ -65,4 +111,52 @@ pub trait NetDriverOps: BaseDriverOps {
     /// Allocate a memory buffer of a specified size for network transmission,
     /// returns [`DevResult`]
     fn alloc_tx_buffer(&mut self, size: usize) -> DevResult<NetBufPtr>;
+
+    /// Enables or disables device interrupts.
+    fn set_irq_enabled(&mut self, _enabled: bool) {}
+
+    /// Handles the device IRQ top half and returns pending work bits.
+    fn handle_irq(&mut self) -> NetIrqEvents {
+        NetIrqEvents::RX | NetIrqEvents::TX
+    }
+
+    /// Polls RX packets in the bottom half.
+    fn poll_rx(
+        &mut self,
+        budget: usize,
+        sink: &mut dyn FnMut(NetBufPtr) -> DevResult,
+    ) -> DevResult<NetPollStatus> {
+        let mut status = NetPollStatus::default();
+        for _ in 0..budget {
+            match self.receive() {
+                Ok(buf) => {
+                    sink(buf)?;
+                    status.work_done += 1;
+                    status.rx_done += 1;
+                }
+                Err(DevError::Again) => return Ok(status),
+                Err(err) => return Err(err),
+            }
+        }
+        status.more_rx = self.can_receive();
+        Ok(status)
+    }
+
+    /// Polls TX completions in the bottom half.
+    fn poll_tx(&mut self, budget: usize) -> DevResult<NetPollStatus> {
+        let mut status = NetPollStatus::default();
+        if budget == 0 {
+            return Ok(status);
+        }
+        self.recycle_tx_buffers()?;
+        status.tx_done = cmp::min(1, budget);
+        status.work_done = status.tx_done;
+        status.more_tx = !self.can_transmit();
+        Ok(status)
+    }
+
+    /// Returns the current link state.
+    fn link_state(&self) -> NetLinkState {
+        NetLinkState::Unknown
+    }
 }

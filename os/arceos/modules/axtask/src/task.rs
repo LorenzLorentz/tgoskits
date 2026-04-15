@@ -17,6 +17,7 @@ use ax_hal::context::TaskContext;
 use ax_hal::tls::TlsArea;
 use ax_kspin::SpinNoIrq;
 use ax_memory_addr::{VirtAddr, align_up_4k};
+use axpoll::{PollTable, PollWaitQueue};
 use futures_util::task::AtomicWaker;
 
 use crate::{AxCpuMask, AxTask, AxTaskRef, WaitQueue};
@@ -88,6 +89,7 @@ pub struct TaskInner {
 
     interrupted: AtomicBool,
     interrupt_waker: AtomicWaker,
+    interrupt_waitq: PollWaitQueue,
 
     exit_code: AtomicI32,
     wait_for_exit: WaitQueue,
@@ -248,6 +250,12 @@ impl TaskInner {
         }
     }
 
+    /// Takes and clears the interrupt state of the task.
+    #[inline]
+    pub fn take_interrupt(&self) -> bool {
+        self.interrupted.swap(false, Ordering::AcqRel)
+    }
+
     /// Clears the interrupt state of the task.
     #[inline]
     pub fn clear_interrupt(&self) {
@@ -259,6 +267,13 @@ impl TaskInner {
     pub fn interrupt(&self) {
         self.interrupted.store(true, Ordering::Release);
         self.interrupt_waker.wake();
+        self.interrupt_waitq.wake();
+    }
+
+    /// Registers the current waiter for task interruption.
+    #[inline]
+    pub fn poll_wait_interrupt(&self, table: &mut PollTable) {
+        self.interrupt_waitq.wait(table);
     }
 }
 
@@ -286,6 +301,7 @@ impl TaskInner {
             preempt_disable_count: AtomicUsize::new(0),
             interrupted: AtomicBool::new(false),
             interrupt_waker: AtomicWaker::new(),
+            interrupt_waitq: PollWaitQueue::new(),
             exit_code: AtomicI32::new(0),
             wait_for_exit: WaitQueue::new(),
             kstack: None,

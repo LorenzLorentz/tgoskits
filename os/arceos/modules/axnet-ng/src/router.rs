@@ -1,5 +1,6 @@
 use alloc::{boxed::Box, vec, vec::Vec};
 
+use ax_driver::prelude::NetPollStatus;
 use smoltcp::{
     iface::SocketSet,
     phy::{DeviceCapabilities, Medium},
@@ -96,6 +97,34 @@ impl Router {
         for dev in &mut self.devices {
             while !self.rx_buffer.is_full() && dev.recv(&mut self.rx_buffer, timestamp) {}
         }
+    }
+
+    pub fn poll_device(
+        &mut self,
+        index: usize,
+        budget: usize,
+        timestamp: Instant,
+    ) -> NetPollStatus {
+        let Some(dev) = self.devices.get_mut(index) else {
+            return NetPollStatus::default();
+        };
+
+        let mut status = dev.poll_tx(budget).unwrap_or_default();
+        if !self.rx_buffer.is_full() {
+            let rx_budget = budget.saturating_sub(status.work_done);
+            if rx_budget > 0 {
+                let rx_status = dev
+                    .poll_rx(rx_budget, &mut self.rx_buffer, timestamp)
+                    .unwrap_or_default();
+                status.work_done += rx_status.work_done;
+                status.rx_done += rx_status.rx_done;
+                status.tx_done += rx_status.tx_done;
+                status.more_rx |= rx_status.more_rx;
+                status.more_tx |= rx_status.more_tx;
+                status.link_changed |= rx_status.link_changed;
+            }
+        }
+        status
     }
 
     pub fn dispatch(&mut self, timestamp: Instant) -> bool {

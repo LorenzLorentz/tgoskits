@@ -440,6 +440,12 @@ impl<G: BaseGuard> CurrentRunQueueRef<'_, G> {
         self.inner.resched();
     }
 
+    /// Block the current task and reschedule, using an out-of-band wake flag to
+    /// avoid lost wakeups between registration and blocking.
+    pub fn waiter_blocked_resched(&mut self, woke: SpinNoIrqGuard<'_, bool>) {
+        self.future_blocked_resched(woke);
+    }
+
     #[cfg(feature = "irq")]
     pub fn sleep_until(&mut self, deadline: ax_hal::time::TimeValue) {
         let curr = &self.current_task;

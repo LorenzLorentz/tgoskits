@@ -2,15 +2,11 @@ use alloc::{borrow::Cow, sync::Arc};
 use core::{
     mem,
     sync::atomic::{AtomicBool, Ordering},
-    task::Context,
 };
 
 use ax_errno::{AxError, AxResult};
-use ax_task::{
-    current,
-    future::{block_on, poll_io},
-};
-use axpoll::{IoEvents, PollSet, Pollable};
+use ax_task::{current, wait_io};
+use axpoll::{IoEvents, PollSet, PollTable, Pollable};
 use spin::RwLock;
 use starry_signal::{SignalInfo, SignalSet};
 use zerocopy::{Immutable, IntoBytes};
@@ -127,7 +123,7 @@ impl FileLike for Signalfd {
             return Err(AxError::InvalidInput);
         }
 
-        block_on(poll_io(self, IoEvents::IN, self.nonblocking(), || {
+        wait_io(self, IoEvents::IN, self.nonblocking(), None, true, || {
             if let Some(sig_info) = self.dequeue_signal() {
                 // Convert SignalInfo to SignalfdSiginfo
                 let sfd_info = SignalfdSiginfo::from_signal_info(&sig_info);
@@ -145,7 +141,7 @@ impl FileLike for Signalfd {
             } else {
                 Err(AxError::WouldBlock)
             }
-        }))
+        })
     }
 
     fn write(&self, _src: &mut IoSrc) -> AxResult<usize> {
@@ -174,9 +170,9 @@ impl Pollable for Signalfd {
         events
     }
 
-    fn register(&self, context: &mut Context<'_>, events: IoEvents) {
+    fn poll_wait(&self, events: IoEvents, table: &mut PollTable) {
         if events.contains(IoEvents::IN) {
-            self.poll_rx.register(context.waker());
+            self.poll_rx.wait(table);
         }
     }
 }

@@ -744,6 +744,7 @@ name = "ax-driver-net"
 version = "0.3.4"
 dependencies = [
  "ax-driver-base",
+ "bitflags 2.11.0",
  "fxmac_rs",
  "ixgbe-driver",
  "log",
@@ -1085,6 +1086,7 @@ dependencies = [
  "ax-fs-ng",
  "ax-hal",
  "ax-io",
+ "ax-percpu",
  "ax-sync",
  "ax-task",
  "axfs-ng-vfs",

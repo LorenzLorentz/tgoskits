@@ -1,7 +1,7 @@
 use core::{future::poll_fn, task::Poll};
 
 use ax_errno::{AxError, AxResult};
-use axpoll::{IoEvents, Pollable};
+use axpoll::{IoEvents, PollTable, Pollable};
 
 /// A helper to wrap a synchronous non-blocking I/O function into an
 /// asynchronous function.
@@ -26,7 +26,8 @@ pub async fn poll_io<P: Pollable, F: FnMut() -> AxResult<T>, T>(
             if non_blocking {
                 return Poll::Ready(Err(AxError::WouldBlock));
             }
-            pollable.register(cx, events);
+            let mut table = PollTable::from_waker(cx.waker());
+            pollable.poll_wait(events, &mut table);
             match f() {
                 Ok(value) => Poll::Ready(Ok(value)),
                 Err(AxError::WouldBlock) => Poll::Pending,
@@ -55,7 +56,11 @@ pub fn register_irq_waker(irq: usize, waker: &core::task::Waker) {
     }
     ax_hal::irq::register_irq_hook(irq_hook);
 
-    POLL_IRQ.lock().entry(irq).or_default().register(waker);
+    POLL_IRQ
+        .lock()
+        .entry(irq)
+        .or_default()
+        .register_waker(waker);
 
     ax_hal::irq::set_enable(irq, true);
 }

@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use ax_errno::{AxError, AxResult};
 use ax_hal::time::TimeValue;
-use ax_task::future::{self, block_on, poll_io};
+use ax_task::wait_io;
 use axpoll::IoEvents;
 use linux_raw_sys::general::{POLLNVAL, pollfd, timespec};
 use starry_signal::SignalSet;
@@ -53,34 +53,32 @@ fn do_poll(
     let fds = FdPollSet(fds);
 
     with_blocked_signals(sigmask, || {
-        match block_on(future::timeout(
-            timeout,
-            poll_io(&fds, IoEvents::empty(), false, || {
-                let mut res = 0usize;
-                for ((fd, events), revents) in fds.0.iter().zip(revents.iter_mut()) {
-                    let mut result = fd.poll();
-                    if result.contains(IoEvents::IN) {
-                        result |= IoEvents::RDNORM;
-                    }
-                    if result.contains(IoEvents::OUT) {
-                        result |= IoEvents::WRNORM;
-                    }
-                    result &= *events;
+        match wait_io(&fds, IoEvents::empty(), false, timeout, true, || {
+            let mut res = 0usize;
+            for ((fd, events), revents) in fds.0.iter().zip(revents.iter_mut()) {
+                let mut result = fd.poll();
+                if result.contains(IoEvents::IN) {
+                    result |= IoEvents::RDNORM;
+                }
+                if result.contains(IoEvents::OUT) {
+                    result |= IoEvents::WRNORM;
+                }
+                result &= *events;
 
-                    **revents = result.bits() as _;
-                    if **revents != 0 {
-                        res += 1;
-                    }
+                **revents = result.bits() as _;
+                if **revents != 0 {
+                    res += 1;
                 }
-                if res > 0 {
-                    Ok(res as _)
-                } else {
-                    Err(AxError::WouldBlock)
-                }
-            }),
-        )) {
-            Ok(r) => r,
-            Err(_) => Ok(0),
+            }
+            if res > 0 {
+                Ok(res as _)
+            } else {
+                Err(AxError::WouldBlock)
+            }
+        }) {
+            Ok(r) => Ok(r),
+            Err(AxError::TimedOut) => Ok(0),
+            Err(err) => Err(err),
         }
     })
 }

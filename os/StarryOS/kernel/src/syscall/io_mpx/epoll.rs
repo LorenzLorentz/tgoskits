@@ -1,7 +1,7 @@
 use core::time::Duration;
 
 use ax_errno::{AxError, AxResult};
-use ax_task::future::{self, block_on, poll_io};
+use ax_task::wait_io;
 use axpoll::IoEvents;
 use bitflags::bitflags;
 use linux_raw_sys::general::{
@@ -93,18 +93,18 @@ fn do_epoll_wait(
     }
     let events = events.get_as_mut_slice(maxevents as usize)?;
 
-    with_blocked_signals(
-        nullable!(sigmask.get_as_ref())?.copied(),
-        || match block_on(future::timeout(
-            timeout,
-            poll_io(epoll.as_ref(), IoEvents::IN, false, || {
-                epoll.poll_events(events)
-            }),
-        )) {
-            Ok(r) => r.map(|n| n as _),
-            Err(_) => Ok(0),
-        },
-    )
+    with_blocked_signals(nullable!(sigmask.get_as_ref())?.copied(), || match wait_io(
+        epoll.as_ref(),
+        IoEvents::IN,
+        false,
+        timeout,
+        true,
+        || epoll.poll_events(events),
+    ) {
+        Ok(r) => Ok(r as _),
+        Err(AxError::TimedOut) => Ok(0),
+        Err(err) => Err(err),
+    })
 }
 
 pub fn sys_epoll_pwait(

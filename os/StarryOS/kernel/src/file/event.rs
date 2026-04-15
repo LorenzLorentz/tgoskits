@@ -1,12 +1,9 @@
 use alloc::{borrow::Cow, sync::Arc};
-use core::{
-    sync::atomic::{AtomicBool, AtomicU64, Ordering},
-    task::Context,
-};
+use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use ax_errno::AxError;
-use ax_task::future::{block_on, poll_io};
-use axpoll::{IoEvents, PollSet, Pollable};
+use ax_task::wait_io;
+use axpoll::{IoEvents, PollSet, PollTable, Pollable};
 
 use crate::file::{FileLike, IoDst, IoSrc};
 
@@ -38,7 +35,7 @@ impl FileLike for EventFd {
             return Err(AxError::InvalidInput);
         }
 
-        block_on(poll_io(self, IoEvents::IN, self.nonblocking(), || {
+        wait_io(self, IoEvents::IN, self.nonblocking(), None, true, || {
             let result = self
                 .count
                 .fetch_update(Ordering::Release, Ordering::Acquire, |count| {
@@ -57,7 +54,7 @@ impl FileLike for EventFd {
                 }
                 Err(_) => Err(AxError::WouldBlock),
             }
-        }))
+        })
     }
 
     fn write(&self, src: &mut IoSrc) -> ax_io::Result<usize> {
@@ -72,7 +69,7 @@ impl FileLike for EventFd {
             return Err(AxError::InvalidInput);
         }
 
-        block_on(poll_io(self, IoEvents::OUT, self.nonblocking(), || {
+        wait_io(self, IoEvents::OUT, self.nonblocking(), None, true, || {
             let result = self
                 .count
                 .fetch_update(Ordering::Release, Ordering::Acquire, |count| {
@@ -89,7 +86,7 @@ impl FileLike for EventFd {
                 }
                 Err(_) => Err(AxError::WouldBlock),
             }
-        }))
+        })
     }
 
     fn nonblocking(&self) -> bool {
@@ -115,12 +112,12 @@ impl Pollable for EventFd {
         events
     }
 
-    fn register(&self, context: &mut Context<'_>, events: IoEvents) {
+    fn poll_wait(&self, events: IoEvents, table: &mut PollTable) {
         if events.contains(IoEvents::IN) {
-            self.poll_rx.register(context.waker());
+            self.poll_rx.wait(table);
         }
         if events.contains(IoEvents::OUT) {
-            self.poll_tx.register(context.waker());
+            self.poll_tx.wait(table);
         }
     }
 }

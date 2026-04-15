@@ -5,12 +5,12 @@ use core::{
 };
 
 use ax_errno::AxResult;
-use ax_task::future::{block_on, poll_io, timeout};
+use ax_task::wait_io;
 use axpoll::{IoEvents, Pollable};
 
 use crate::{
-    get_service,
     options::{Configurable, GetSocketOption, SetSocketOption},
+    register_socket_waiter,
 };
 
 /// General options for all sockets.
@@ -70,7 +70,8 @@ impl GeneralOptions {
     }
 
     pub fn register_waker(&self, waker: &Waker) {
-        get_service().register_waker(self.device_mask(), waker);
+        let _ = self.device_mask();
+        register_socket_waiter(waker);
     }
 
     pub fn send_poller<P: Pollable, F: FnMut() -> AxResult<T>, T>(
@@ -78,10 +79,14 @@ impl GeneralOptions {
         pollable: &P,
         f: F,
     ) -> AxResult<T> {
-        block_on(timeout(
+        wait_io(
+            pollable,
+            IoEvents::OUT,
+            self.nonblocking(),
             self.send_timeout(),
-            poll_io(pollable, IoEvents::OUT, self.nonblocking(), f),
-        ))?
+            true,
+            f,
+        )
     }
 
     pub fn recv_poller<P: Pollable, F: FnMut() -> AxResult<T>, T>(
@@ -89,10 +94,14 @@ impl GeneralOptions {
         pollable: &P,
         f: F,
     ) -> AxResult<T> {
-        block_on(timeout(
+        wait_io(
+            pollable,
+            IoEvents::IN,
+            self.nonblocking(),
             self.recv_timeout(),
-            poll_io(pollable, IoEvents::IN, self.nonblocking(), f),
-        ))?
+            true,
+            f,
+        )
     }
 }
 impl Configurable for GeneralOptions {

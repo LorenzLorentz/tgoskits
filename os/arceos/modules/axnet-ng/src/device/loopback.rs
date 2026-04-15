@@ -1,6 +1,6 @@
 use alloc::vec;
-use core::task::Waker;
 
+use ax_driver::prelude::{DevResult, NetLinkState, NetPollStatus};
 use axpoll::PollSet;
 use smoltcp::{
     storage::{PacketBuffer, PacketMetadata},
@@ -35,6 +35,29 @@ impl Device for LoopbackDevice {
         "lo"
     }
 
+    fn poll_rx(
+        &mut self,
+        budget: usize,
+        buffer: &mut PacketBuffer<()>,
+        timestamp: Instant,
+    ) -> DevResult<NetPollStatus> {
+        let mut status = NetPollStatus::default();
+        for _ in 0..budget {
+            if self.recv(buffer, timestamp) {
+                status.work_done += 1;
+                status.rx_done += 1;
+            } else {
+                break;
+            }
+        }
+        status.more_rx = !self.buffer.is_empty();
+        Ok(status)
+    }
+
+    fn link_state(&self) -> NetLinkState {
+        NetLinkState::Up
+    }
+
     fn recv(&mut self, buffer: &mut PacketBuffer<()>, _timestamp: Instant) -> bool {
         self.buffer.dequeue().ok().is_some_and(|(_, rx_buf)| {
             buffer
@@ -60,9 +83,5 @@ impl Device for LoopbackDevice {
                 false
             }
         }
-    }
-
-    fn register_waker(&self, waker: &Waker) {
-        self.poll.register(waker);
     }
 }
