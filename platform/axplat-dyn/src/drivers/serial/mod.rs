@@ -43,64 +43,44 @@ static SERIAL_IRQ_HANDLERS: [Mutex<Option<some_serial::BIrqHandler>>; MAX_SERIAL
     Mutex::new(None),
 ];
 
-enum PlatformSerial {
-    Pl011(pl011::Pl011),
-    Ns16550Mmio(ns16550::Ns16550<ns16550::Mmio>),
+trait PlatformSerialDevice: rdrive::DriverGeneric {
+    fn base_addr(&self) -> usize;
+
+    #[cfg(feature = "irq")]
+    fn take_irq_handler(&mut self) -> Option<some_serial::BIrqHandler>;
+
+    #[cfg(feature = "irq")]
+    fn enable_interrupts(&mut self, mask: InterruptMask);
 }
 
-impl PlatformSerial {
+impl<T> PlatformSerialDevice for T
+where
+    T: InterfaceRaw + rdrive::DriverGeneric,
+{
     fn base_addr(&self) -> usize {
-        match self {
-            Self::Pl011(serial) => serial.base_addr(),
-            Self::Ns16550Mmio(serial) => serial.base_addr(),
-        }
+        InterfaceRaw::base_addr(self)
     }
 
     #[cfg(feature = "irq")]
-    fn irq_handler(&mut self) -> Option<some_serial::BIrqHandler> {
-        match self {
-            Self::Pl011(serial) => serial
-                .irq_handler()
-                .map(|handler| Box::new(handler) as some_serial::BIrqHandler),
-            Self::Ns16550Mmio(serial) => serial
-                .irq_handler()
-                .map(|handler| Box::new(handler) as some_serial::BIrqHandler),
-        }
+    fn take_irq_handler(&mut self) -> Option<some_serial::BIrqHandler> {
+        InterfaceRaw::irq_handler(self).map(|handler| Box::new(handler) as some_serial::BIrqHandler)
     }
 
     #[cfg(feature = "irq")]
     fn enable_interrupts(&mut self, mask: InterruptMask) {
-        match self {
-            Self::Pl011(serial) => {
-                let mut enabled = serial.get_irq_mask();
-                enabled |= mask;
-                serial.set_irq_mask(enabled);
-            }
-            Self::Ns16550Mmio(serial) => {
-                let mut enabled = serial.get_irq_mask();
-                enabled |= mask;
-                serial.set_irq_mask(enabled);
-            }
-        }
+        let mut enabled = InterfaceRaw::get_irq_mask(self);
+        enabled |= mask;
+        InterfaceRaw::set_irq_mask(self, enabled);
     }
 }
 
-impl rdrive::DriverGeneric for PlatformSerial {
+impl rdrive::DriverGeneric for Box<dyn PlatformSerialDevice> {
     fn name(&self) -> &str {
-        match self {
-            Self::Pl011(_) => "serial-pl011",
-            Self::Ns16550Mmio(_) => "serial-ns16550-mmio",
-        }
-    }
-
-    fn raw_any(&self) -> Option<&dyn core::any::Any> {
-        Some(self)
-    }
-
-    fn raw_any_mut(&mut self) -> Option<&mut dyn core::any::Any> {
-        Some(self)
+        self.as_ref().name()
     }
 }
+
+type DynPlatformSerial = Box<dyn PlatformSerialDevice>;
 
 module_driver!(
     name: "common serial",
@@ -183,8 +163,8 @@ fn irq_handler_for_slot(slot: usize) -> irq::IrqHandler {
 }
 
 #[cfg(feature = "irq")]
-fn register_serial_irq(irq_num: usize, serial: &mut PlatformSerial) {
-    let Some(handler) = serial.irq_handler() else {
+fn register_serial_irq(irq_num: usize, serial: &mut dyn PlatformSerialDevice) {
+    let Some(handler) = serial.take_irq_handler() else {
         return;
     };
 
@@ -225,12 +205,10 @@ fn probe(info: FdtInfo<'_>, plat_dev: PlatformDevice) -> Result<(), OnProbeError
         .and_then(|prop| prop.get_u32())
         .unwrap_or(24_000_000);
 
-    let mut serial = None;
+    let mut serial: Option<DynPlatformSerial> = None;
     for c in info.node.as_node().compatibles() {
         if c == "arm,pl011" {
-            serial = Some(PlatformSerial::Pl011(pl011::Pl011::new(
-                mmio_base, clock_freq,
-            )));
+            serial = Some(Box::new(pl011::Pl011::new(mmio_base, clock_freq)));
             break;
         }
 
@@ -241,25 +219,25 @@ fn probe(info: FdtInfo<'_>, plat_dev: PlatformDevice) -> Result<(), OnProbeError
                 .get_property("reg-io-width")
                 .and_then(|prop| prop.get_u32())
                 .unwrap_or(1) as usize;
-            serial = Some(PlatformSerial::Ns16550Mmio(ns16550::Ns16550::new_mmio(
+            serial = Some(Box::new(ns16550::Ns16550::new_mmio(
                 mmio_base, clock_freq, reg_width,
             )));
             break;
         }
     }
-    if let Some(mut s) = serial {
+    if let Some(mut serial) = serial {
         let irq_num = parse_irq_num(&info);
         info!(
             "Serial {}@{:#x} registered successfully",
             info.node.name(),
-            s.base_addr()
+            serial.base_addr()
         );
         maybe_record_console_irq(irq_num);
         #[cfg(feature = "irq")]
         if let Some(irq_num) = irq_num {
-            register_serial_irq(irq_num, &mut s);
+            register_serial_irq(irq_num, serial.as_mut());
         }
-        plat_dev.register(s);
+        plat_dev.register(serial);
     }
 
     Ok(())

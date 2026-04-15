@@ -49,6 +49,7 @@ axfs-ng-vfs
 axhvc
 axklib
 axpoll
+axplat-dyn
 axvmconfig
 bitmap-allocator
 range-alloc-arceos

@@ -58,7 +58,7 @@ rockchip-pm = { version = "0.4", optional = true }
 phytium-mci = { version = "0.1", default-features = false, features = ["pio"], optional = true }
 sdmmc = { version = "0.1", default-features = false, features = ["pio"], optional = true }
 somehal = "0.6"
-some-serial = { version = "0.3.1", optional = true }
+some-serial = { version = "0.4.0", optional = true }
 spin = "0.10"
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
