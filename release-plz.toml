@@ -88,3 +88,7 @@ release = false
 [[package]]
 name = "arceos-yield"
 release = false
+
+[[package]]
+name = "smoltcp"
+release = false
