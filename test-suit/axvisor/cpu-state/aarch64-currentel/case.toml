@@ -1,4 +1,4 @@
-id = "cpu.currentel.read"
+id = "cpu.aarch64.currentel"
 interface = "privileged-control-register-currentel"
 arch = ["aarch64"]
 timeout_secs = 5

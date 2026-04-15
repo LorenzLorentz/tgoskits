@@ -6,6 +6,7 @@ authors = ["OpenAI Codex"]
 
 [features]
 ax-std = ["dep:ax-std"]
+smp = ["ax-std", "ax-std/alloc", "ax-std/multitask", "ax-std/smp"]
 
 [dependencies]
 ax-std = { workspace = true, optional = true }

@@ -110,11 +110,11 @@ pub(super) async fn build_and_stage_cases(
     let target = target_for_arch_checked(arch)?.to_string();
     let mut prepared = Vec::with_capacity(cases.len());
 
-    for (index, (case, layout)) in cases.iter().zip(layouts).enumerate() {
+    for (case, layout) in cases.iter().zip(layouts) {
         let package = resolve_case_package_name(&case.case_dir)?;
         let build_info_path = resolve_build_info_path_in_dir(&case.case_dir, &target);
         let asset_key = sanitize_asset_key(&case.manifest.id);
-        let vm_id = index + 1;
+        let vm_id = 1;
         let host_case_dir = artifacts.run_dir.join("cases").join(&asset_key);
         fs::create_dir_all(&host_case_dir)
             .with_context(|| format!("failed to create {}", host_case_dir.display()))?;
@@ -435,7 +435,7 @@ mod tests {
             case_dir.join("Cargo.toml"),
             r#"
 [package]
-name = "axvisor-currentel-read"
+name = "axvisor-aarch64-currentel"
 version = "0.1.0"
 "#,
         )
@@ -443,19 +443,19 @@ version = "0.1.0"
 
         assert_eq!(
             resolve_case_package_name(&case_dir).unwrap(),
-            "axvisor-currentel-read"
+            "axvisor-aarch64-currentel"
         );
     }
 
     #[test]
     fn sanitize_asset_key_rewrites_unsupported_characters() {
         assert_eq!(
-            sanitize_asset_key("cpu/currentel:read"),
-            "cpu_currentel_read"
+            sanitize_asset_key("cpu/aarch64-currentel:read"),
+            "cpu_aarch64-currentel_read"
         );
         assert_eq!(
-            sanitize_asset_key("cpu.currentel.read"),
-            "cpu.currentel.read"
+            sanitize_asset_key("cpu.aarch64.currentel"),
+            "cpu.aarch64.currentel"
         );
     }
 

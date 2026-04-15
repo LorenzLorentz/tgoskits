@@ -12,7 +12,7 @@ use ax_memory_addr::{MemoryAddr, PAGE_SIZE_4K, VirtAddr};
 use ax_mm::new_user_aspace;
 use axvisor_guestlib::{emit_json_result, power_off_or_hang};
 
-const CASE_ID: &str = "cpu.currentel.transition";
+const CASE_ID: &str = "cpu.aarch64.currentel";
 const USER_CODE_START: usize = 0x4_000;
 const USER_SHARED_START: usize = 0x8_000;
 const USER_STACK_START: usize = 0x10_000;
@@ -32,12 +32,17 @@ core::arch::global_asm!(
 axdiff_currentel_user_entry:
     mov x1, #1
     str x1, [x0, #8]
+    // CurrentEL is not accessible from EL0 on AArch64. The first run is
+    // expected to trap here so the guest can record how the hypervisor and
+    // guest kernel report the exception back to EL1.
     mrs x1, CurrentEL
     mov x1, #0xff
     str x1, [x0]
 axdiff_currentel_user_after_fault:
     mov x1, #2
     str x1, [x0, #8]
+    // The resumed path exits via SVC so the case can distinguish "resumed
+    // correctly after the fault" from "returned for some other reason".
     mov x8, #0
     svc #0
 1:
@@ -147,9 +152,13 @@ fn prepare_user_aspace() -> Result<(ax_mm::AddrSpace, VirtAddr, VirtAddr), &'sta
         .map_alloc(user_stack_start, PAGE_SIZE_4K, data_flags, true)
         .map_err(|_| "map_user_stack")?;
 
+    // Copy a tiny in-memory EL0 payload instead of depending on an external
+    // user binary. This keeps the case self-contained and easy to reproduce.
     aspace
         .write(user_code_start, code_bytes)
         .map_err(|_| "copy_user_code")?;
+    // The shared page is the minimal communication channel from EL0 back to
+    // EL1: the payload records which phase it reached and any visible data.
     aspace
         .write(user_shared_start, &[0; 16])
         .map_err(|_| "clear_shared_page")?;
@@ -228,6 +237,8 @@ fn main() -> ! {
     let user_after_fault_label = axdiff_currentel_user_after_fault as *const () as usize;
     let user_after_fault = USER_CODE_START + user_after_fault_label.saturating_sub(user_entry);
 
+    // Install the case-local user page table so UserContext::run enters the
+    // address space we just built rather than whatever the kernel used before.
     let old_ttbr0 = ax_hal::asm::read_user_page_table();
     unsafe {
         ax_hal::asm::write_user_page_table(user_aspace.page_table_root());
@@ -240,6 +251,9 @@ fn main() -> ! {
         user_shared_start.as_usize(),
     );
 
+    // First entry to EL0 should fault on the CurrentEL read. The shared page
+    // phase marker lets us distinguish "fault happened at the intended site"
+    // from "user payload never ran".
     let first_reason = uctx.run();
     let [el0_raw_after_exception, phase_after_exception] =
         match read_shared_words(&user_aspace, user_shared_start) {
@@ -256,6 +270,8 @@ fn main() -> ! {
         );
     }
 
+    // Resume at the instruction after the faulting MRS. This checks that the
+    // guest can recover from the exception path and continue executing at EL0.
     uctx.set_ip(user_after_fault);
     let second_reason = uctx.run();
     let [el0_raw_after_syscall, phase_after_syscall] =
@@ -283,6 +299,8 @@ fn main() -> ! {
 
     let el1_after = read_current_el();
 
+    // Keep both return reasons and the before/after EL1 observations so the
+    // baseline can be compared against the DUT at the semantic level.
     emit_json_result(
         CASE_ID,
         "ok",

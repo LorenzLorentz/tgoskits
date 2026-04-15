@@ -1,5 +1,5 @@
 [package]
-name = "axvisor-currentel-transition"
+name = "axvisor-aarch64-currentel"
 version = "0.1.0"
 edition.workspace = true
 

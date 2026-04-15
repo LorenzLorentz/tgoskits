@@ -1,0 +1,7 @@
+id = "cpu.aarch64.mpidr"
+interface = "cpu-affinity-register-mpidr"
+arch = ["aarch64"]
+timeout_secs = 10
+
+[compare]
+mode = "strong"

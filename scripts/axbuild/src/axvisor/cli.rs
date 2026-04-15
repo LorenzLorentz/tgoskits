@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::{ArgGroup, Args, Subcommand};
 
-use crate::context::AxvisorCliArgs;
+use crate::context::{AxvisorCliArgs, DEFAULT_AXVISOR_ARCH};
 
 /// Axvisor host-side commands
 #[derive(Subcommand)]
@@ -154,7 +154,7 @@ pub struct ArgsTestBoard {
         .args(["suite", "case"])
 ))]
 pub struct ArgsTestDiff {
-    #[arg(long, value_name = "ARCH")]
+    #[arg(long, value_name = "ARCH", default_value = DEFAULT_AXVISOR_ARCH)]
     pub arch: String,
 
     #[arg(long, value_name = "SUITE")]
@@ -453,6 +453,39 @@ mod tests {
     }
 
     #[test]
+    fn command_defaults_test_diff_arch_to_aarch64() {
+        #[derive(clap::Parser)]
+        struct Cli {
+            #[command(subcommand)]
+            command: Command,
+        }
+
+        let cli = Cli::try_parse_from([
+            "axvisor",
+            "test",
+            "diff",
+            "--case",
+            "test-suit/axvisor/cpu-state/aarch64-currentel",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Command::Test(args) => match args.command {
+                TestCommand::Diff(args) => {
+                    assert_eq!(args.arch, "aarch64");
+                    assert_eq!(
+                        args.case,
+                        Some(PathBuf::from("test-suit/axvisor/cpu-state/aarch64-currentel"))
+                    );
+                    assert_eq!(args.suite, None);
+                }
+                _ => panic!("expected diff test command"),
+            },
+            _ => panic!("expected test command"),
+        }
+    }
+
+    #[test]
     fn command_rejects_test_diff_without_case_or_suite() {
         #[derive(clap::Parser)]
         struct Cli {
@@ -460,7 +493,7 @@ mod tests {
             command: Command,
         }
 
-        assert!(Cli::try_parse_from(["axvisor", "test", "diff", "--arch", "aarch64"]).is_err());
+        assert!(Cli::try_parse_from(["axvisor", "test", "diff"]).is_err());
     }
 
     #[test]

@@ -1,11 +1,11 @@
 # Vm base info configs
 #
 [base]
-id = 3
-name = "axdiff-currentel-transition"
+id = 4
+name = "axdiff-aarch64-mpidr"
 vm_type = 1
-cpu_num = 1
-phys_cpu_ids = [0]
+cpu_num = 4
+phys_cpu_ids = [0, 1, 2, 3]
 
 #
 # Vm kernel configs
@@ -13,7 +13,7 @@ phys_cpu_ids = [0]
 [kernel]
 entry_point = 0x8020_0000
 image_location = "fs"
-kernel_path = "/axdiff/images/cpu.currentel.transition/kernel.bin"
+kernel_path = "/axdiff/images/cpu.aarch64.mpidr/kernel.bin"
 kernel_load_addr = 0x8020_0000
 dtb_load_addr = 0x8000_0000
 
@@ -26,7 +26,12 @@ memory_regions = [
 #
 [devices]
 passthrough_devices = [
-  ["/"],
+  ["/chosen"],
+  ["/aliases"],
+  ["/pl011@9000000"],
+  ["/intc@8000000"],
+  ["/timer"],
+  ["/psci"],
 ]
 
 passthrough_addresses = []

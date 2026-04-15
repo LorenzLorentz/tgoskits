@@ -4,8 +4,8 @@ use ostool::{
     Tool, ToolConfig,
     board::{RunBoardOptions, config::BoardRunConfig},
     build::{CargoQemuRunnerArgs, CargoRunnerKind, CargoUbootRunnerArgs, config::Cargo},
-    run::{qemu::QemuConfig, uboot::UbootConfig},
     ctx::OutputArtifacts,
+    run::{qemu::QemuConfig, uboot::UbootConfig},
 };
 
 mod arch;

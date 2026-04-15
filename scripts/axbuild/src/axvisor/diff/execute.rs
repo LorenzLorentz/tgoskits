@@ -34,7 +34,6 @@ const HOST_VM_CREATE_TIMEOUT_SECS: u64 = 15;
 const HOST_GUEST_EXIT_GRACE_SECS: u64 = 2;
 const HOST_VM_STOP_TIMEOUT_SECS: u64 = 3;
 const HOST_VM_STATE_POLL_INTERVAL_MILLIS: u64 = 200;
-const AXVISOR_VCPU_BOOT_DELAY_STEP_SECS: u64 = 5;
 const QEMU_ROOTFS_PLACEHOLDER_OLD: &str = "${workspaceFolder}/tmp/rootfs.img";
 const QEMU_ROOTFS_PLACEHOLDER_NEW: &str = "${workspaceFolder}/os/axvisor/tmp/rootfs.img";
 
@@ -241,60 +240,54 @@ async fn run_all_targets(
     let runtime = runtime.to_path_buf();
     let qemu_config_path =
         qemu::default_qemu_config_template_path(&request.axvisor_dir, &request.arch);
-    let mut session = Some(spawn_prepared_target_session(
+    let mut session = Some(spawn_target_session(
         &request.arch,
         &runtime,
         &qemu_config_path,
         &artifacts.target_rootfs,
         plan.guest_log,
-        prepared_cases,
     )?);
 
     let mut records = Vec::with_capacity(plan.cases.len());
     let mut host_log = String::new();
     for (index, (case, prepared)) in plan.cases.iter().zip(prepared_cases).enumerate() {
-        loop {
-            let (record, action) = {
-                let session_ref = session
-                    .as_mut()
-                    .expect("target session should always exist before running a case");
-                run_target_case(case, prepared, session_ref)?
-            };
+        let (record, action) = {
+            let session_ref = session
+                .as_mut()
+                .expect("target session should always exist before running a case");
+            run_target_case(case, prepared, session_ref)?
+        };
 
-            match action {
-                HostSessionAction::KeepAlive => {
-                    records.push(record);
-                    break;
-                }
-                HostSessionAction::RestartRequired { reason } => {
-                    records.push(record);
+        match action {
+            HostSessionAction::KeepAlive => {
+                records.push(record);
+            }
+            HostSessionAction::RestartRequired { reason } => {
+                records.push(record);
 
-                    let mut current = session
-                        .take()
-                        .expect("target session should exist when restart is requested");
-                    append_session_log(
-                        &mut host_log,
-                        current.buffer(),
-                        Some(&format!("host session restart requested: {reason}")),
+                let mut current = session
+                    .take()
+                    .expect("target session should exist when restart is requested");
+                append_session_log(
+                    &mut host_log,
+                    current.buffer(),
+                    Some(&format!("host session restart requested: {reason}")),
+                );
+                current.terminate()?;
+
+                if index + 1 < plan.cases.len() {
+                    session = Some(
+                        spawn_target_session(
+                            &request.arch,
+                            &runtime,
+                            &qemu_config_path,
+                            &artifacts.target_rootfs,
+                            plan.guest_log,
+                        )
+                        .with_context(|| {
+                            format!("failed to relaunch AxVisor host after: {reason}")
+                        })?,
                     );
-                    current.terminate()?;
-
-                    if index + 1 < plan.cases.len() {
-                        session = Some(
-                            spawn_prepared_target_session(
-                                &request.arch,
-                                &runtime,
-                                &qemu_config_path,
-                                &artifacts.target_rootfs,
-                                plan.guest_log,
-                                prepared_cases,
-                            )
-                            .with_context(|| {
-                                format!("failed to relaunch AxVisor host after: {reason}")
-                            })?,
-                        );
-                    }
-                    break;
                 }
             }
         }
@@ -354,31 +347,45 @@ fn run_target_case(
     let result_path = prepared.host_case_dir.join("target.result.json");
     let log_start = session.buffer_len();
     let cleanup_vm_id = prepared.vm_id;
-    let outcome = (|| -> anyhow::Result<SideOutcome> {
-        let result_mark = session.buffer_len();
-        session.send_line(&session::render_vm_start_cmd(cleanup_vm_id))?;
-        let _ = session
-            .wait_for_prompt_after(result_mark, Duration::from_secs(HOST_COMMAND_TIMEOUT_SECS));
-        let result_timeout = Duration::from_secs(
-            case.manifest.timeout_secs + axvisor_vm_boot_delay_secs(cleanup_vm_id) + 1,
-        );
+    let mut vm_created = false;
+    let outcome = match create_vm(
+        session,
+        cleanup_vm_id,
+        Path::new(&prepared.guest_vm_config_path),
+        &case.manifest.id,
+    ) {
+        Ok(()) => {
+            vm_created = true;
+            (|| -> anyhow::Result<SideOutcome> {
+                let result_mark = session.buffer_len();
+                session.send_line(&session::render_vm_start_cmd(cleanup_vm_id))?;
+                let _ = session.wait_for_prompt_after(
+                    result_mark,
+                    Duration::from_secs(HOST_COMMAND_TIMEOUT_SECS),
+                );
+                let result_timeout = Duration::from_secs(case.manifest.timeout_secs + 1);
 
-        match session.wait_for_result_after(result_mark, result_timeout) {
-            Ok(payload) => {
-                let result = parse_guest_result(&payload, &case.manifest.id)?;
-                persist_guest_result(&result_path, &result)?;
-                Ok(SideOutcome::GuestResult { result })
-            }
-            Err(err) => Ok(SideOutcome::RunnerError {
+                match session.wait_for_result_after(result_mark, result_timeout) {
+                    Ok(payload) => {
+                        let result = parse_guest_result(&payload, &case.manifest.id)?;
+                        persist_guest_result(&result_path, &result)?;
+                        Ok(SideOutcome::GuestResult { result })
+                    }
+                    Err(err) => Ok(SideOutcome::RunnerError {
+                        message: err.to_string(),
+                    }),
+                }
+            })()
+            .unwrap_or_else(|err| SideOutcome::RunnerError {
                 message: err.to_string(),
-            }),
+            })
         }
-    })()
-    .unwrap_or_else(|err| SideOutcome::RunnerError {
-        message: err.to_string(),
-    });
+        Err(err) => SideOutcome::RunnerError {
+            message: err.to_string(),
+        },
+    };
 
-    let (cleanup_message, host_action) = {
+    let (cleanup_message, host_action) = if vm_created {
         let strategy = match &outcome {
             SideOutcome::GuestResult { .. } => VmCleanupStrategy::GuestShouldSelfExit,
             SideOutcome::RunnerError { .. } => VmCleanupStrategy::RunnerMustStop,
@@ -395,6 +402,16 @@ fn run_target_case(
                 },
             ),
         }
+    } else {
+        (
+            None,
+            HostSessionAction::RestartRequired {
+                reason: format!(
+                    "failed to create VM[{cleanup_vm_id}] for `{}`",
+                    case.manifest.id
+                ),
+            },
+        )
     };
     let log_end = session.buffer_len();
     let mut raw_log = session.slice(log_start, log_end).to_string();
@@ -476,6 +493,38 @@ fn delete_vm(session: &mut QemuSession, vm_id: usize) -> anyhow::Result<()> {
     session
         .wait_for_prompt_after(delete_mark, Duration::from_secs(HOST_COMMAND_TIMEOUT_SECS))
         .context("timed out waiting for `vm delete` prompt")?;
+    wait_for_vm_missing(
+        session,
+        vm_id,
+        Duration::from_secs(HOST_COMMAND_TIMEOUT_SECS),
+    )?;
+    Ok(())
+}
+
+fn create_vm(
+    session: &mut QemuSession,
+    vm_id: usize,
+    config_path: &Path,
+    case_id: &str,
+) -> anyhow::Result<()> {
+    let create_mark = session.buffer_len();
+    session.send_line(&session::render_vm_create_cmd(config_path))?;
+    let create_output = session
+        .wait_for_prompt_after(
+            create_mark,
+            Duration::from_secs(HOST_VM_CREATE_TIMEOUT_SECS),
+        )
+        .map_err(|err| {
+            err.context(format!(
+                "timed out waiting for `vm create` prompt while preparing `{case_id}`\nrecent \
+                 host output:\n{}",
+                recent_output_tail(&session.buffer()[create_mark..], 24)
+            ))
+        })?;
+    let created_ids = session::parse_created_vm_ids(&create_output);
+    if !created_ids.contains(&vm_id) {
+        bail!("failed to observe prepared VM id {vm_id} while creating `{case_id}`");
+    }
     Ok(())
 }
 
@@ -493,6 +542,26 @@ fn wait_for_vm_terminal_state(
         if Instant::now() >= deadline {
             bail!(
                 "VM[{vm_id}] did not reach a terminal state within {}s",
+                timeout.as_secs()
+            );
+        }
+        thread::sleep(Duration::from_millis(HOST_VM_STATE_POLL_INTERVAL_MILLIS));
+    }
+}
+
+fn wait_for_vm_missing(
+    session: &mut QemuSession,
+    vm_id: usize,
+    timeout: Duration,
+) -> anyhow::Result<()> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if query_vm_state(session, vm_id)? == VmLifecycleState::Missing {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            bail!(
+                "VM[{vm_id}] was not removed from the VM list within {}s",
                 timeout.as_secs()
             );
         }
@@ -562,57 +631,6 @@ fn spawn_target_session(
         .wait_for_prompt(Duration::from_secs(HOST_BOOT_TIMEOUT_SECS))
         .context("AxVisor host did not reach shell prompt in time")?;
     Ok(session)
-}
-
-fn spawn_prepared_target_session(
-    arch: &str,
-    runtime: &Path,
-    qemu_config_path: &Path,
-    rootfs: &Path,
-    guest_log: bool,
-    prepared_cases: &[PreparedCaseAssets],
-) -> anyhow::Result<QemuSession> {
-    let mut session = spawn_target_session(arch, runtime, qemu_config_path, rootfs, guest_log)?;
-    prepare_target_vms(&mut session, prepared_cases)?;
-    Ok(session)
-}
-
-fn axvisor_vm_boot_delay_secs(vm_id: usize) -> u64 {
-    vm_id.saturating_sub(1) as u64 * AXVISOR_VCPU_BOOT_DELAY_STEP_SECS
-}
-
-fn prepare_target_vms(
-    session: &mut QemuSession,
-    prepared_cases: &[PreparedCaseAssets],
-) -> anyhow::Result<()> {
-    for prepared in prepared_cases {
-        let create_mark = session.buffer_len();
-        session.send_line(&session::render_vm_create_cmd(Path::new(
-            &prepared.guest_vm_config_path,
-        )))?;
-        let create_output = session
-            .wait_for_prompt_after(
-                create_mark,
-                Duration::from_secs(HOST_VM_CREATE_TIMEOUT_SECS),
-            )
-            .map_err(|err| {
-                err.context(format!(
-                    "timed out waiting for `vm create` prompt while preparing `{}`\nrecent host \
-                     output:\n{}",
-                    prepared.case_id,
-                    recent_output_tail(&session.buffer()[create_mark..], 24)
-                ))
-            })?;
-        let created_ids = session::parse_created_vm_ids(&create_output);
-        if !created_ids.contains(&prepared.vm_id) {
-            bail!(
-                "failed to observe prepared VM id {} while creating `{}`",
-                prepared.vm_id,
-                prepared.case_id
-            );
-        }
-    }
-    Ok(())
 }
 
 fn append_session_log(host_log: &mut String, session_log: &str, header: Option<&str>) {
@@ -878,7 +896,8 @@ fn load_qemu_args(
     if force_tcg {
         force_tcg_acceleration(&mut args);
     }
-    if config.to_bin { Ok(args) } else { Ok(args) }
+    let _ = config.to_bin;
+    Ok(args)
 }
 
 fn force_tcg_acceleration(args: &mut Vec<String>) {
@@ -1221,7 +1240,7 @@ vm_configs = ["old.toml"]
     fn upgrade_outcome_with_runtime_failures_downgrades_guest_result() {
         let outcome = SideOutcome::GuestResult {
             result: GuestResult {
-                case_id: "cpu.currentel.read".to_string(),
+                case_id: "cpu.aarch64.currentel".to_string(),
                 status: "ok".to_string(),
                 diff: serde_json::json!({"raw": 4, "decoded_el": 1}),
             },
@@ -1240,7 +1259,7 @@ vm_configs = ["old.toml"]
         let case = LoadedCase {
             case_dir: dir.path().join("case"),
             manifest: crate::axvisor::diff::manifest::CaseManifest {
-                id: "cpu.currentel.read".to_string(),
+                id: "cpu.aarch64.currentel".to_string(),
                 interface: None,
                 arch: vec!["aarch64".to_string()],
                 timeout_secs: 5,
@@ -1251,17 +1270,17 @@ vm_configs = ["old.toml"]
             },
         };
         let prepared = PreparedCaseAssets {
-            case_id: "cpu.currentel.read".to_string(),
-            asset_key: "cpu.currentel.read".to_string(),
+            case_id: "cpu.aarch64.currentel".to_string(),
+            asset_key: "cpu.aarch64.currentel".to_string(),
             vm_id: 1,
-            package: "axvisor-currentel-read".to_string(),
+            package: "axvisor-aarch64-currentel".to_string(),
             target: "aarch64-unknown-none-softfloat".to_string(),
             build_info_path: dir.path().join("build-aarch64.toml"),
             host_case_dir: dir.path().join("host-case"),
             staged_kernel_host_path: dir.path().join("kernel.bin"),
             rendered_vm_host_path: dir.path().join("vm.toml"),
-            guest_kernel_path: "/axdiff/images/cpu.currentel.read/kernel.bin".to_string(),
-            guest_vm_config_path: "/axdiff/vm/cpu.currentel.read.toml".to_string(),
+            guest_kernel_path: "/axdiff/images/cpu.aarch64.currentel/kernel.bin".to_string(),
+            guest_vm_config_path: "/axdiff/vm/cpu.aarch64.currentel.toml".to_string(),
             runtime_artifact_path: dir.path().join("runtime.bin"),
             baseline_qemu_config: dir.path().join("qemu-aarch64.toml"),
             weak_compare_executable: None,
@@ -1276,7 +1295,7 @@ vm_configs = ["old.toml"]
             ),
             outcome: SideOutcome::GuestResult {
                 result: GuestResult {
-                    case_id: "cpu.currentel.read".to_string(),
+                    case_id: "cpu.aarch64.currentel".to_string(),
                     status: "ok".to_string(),
                     diff: serde_json::json!({"raw": 4, "decoded_el": 1}),
                 },

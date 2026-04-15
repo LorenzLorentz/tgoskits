@@ -7,16 +7,11 @@ use core::fmt::Write;
 #[macro_use]
 extern crate ax_std as std;
 
-#[cfg(feature = "ax-std")]
-use std::os::arceos::{
-    api::task::{AxCpuMask, ax_set_current_affinity},
-    modules::ax_hal::percpu::this_cpu_id,
-};
 use std::{println, string::String, thread, vec::Vec};
 
-use axvisor_guestlib::{emit_json_result, power_off_or_hang};
+use axvisor_guestlib::{emit_json_result, power_off_or_hang, smp};
 
-const CASE_ID: &str = "cpu.mpidr.multicore-read";
+const CASE_ID: &str = "cpu.aarch64.mpidr";
 const SAMPLES_PER_CPU: usize = 3;
 
 #[derive(Clone, Copy)]
@@ -42,28 +37,11 @@ fn read_mpidr_el1() -> u64 {
     0
 }
 
-#[cfg(feature = "ax-std")]
-fn pin_current_to_cpu(cpu_id: usize) {
-    assert!(
-        ax_set_current_affinity(AxCpuMask::one_shot(cpu_id)).is_ok(),
-        "failed to pin current task to CPU {cpu_id}"
-    );
-    for _ in 0..256 {
-        if this_cpu_id() == cpu_id {
-            return;
-        }
-        thread::yield_now();
-    }
-    assert_eq!(
-        this_cpu_id(),
-        cpu_id,
-        "task did not migrate to CPU {cpu_id}"
-    );
-}
-
 fn read_samples() -> [u64; SAMPLES_PER_CPU] {
     let mut samples = [0u64; SAMPLES_PER_CPU];
     for sample in &mut samples {
+        // Read the same register several times on the same CPU to catch
+        // instability inside one vCPU before comparing across vCPUs.
         *sample = read_mpidr_el1();
         thread::yield_now();
     }
@@ -72,10 +50,10 @@ fn read_samples() -> [u64; SAMPLES_PER_CPU] {
 
 #[cfg(feature = "ax-std")]
 fn probe_cpu(cpu_id: usize) -> CpuRecord {
-    pin_current_to_cpu(cpu_id);
+    smp::pin_current_to_cpu(cpu_id);
     CpuRecord {
         logical_cpu_id: cpu_id,
-        observed_cpu_id: this_cpu_id(),
+        observed_cpu_id: smp::current_cpu_id(),
         samples: read_samples(),
     }
 }
@@ -113,16 +91,10 @@ fn decode_record(record: &CpuRecord) -> String {
 fn main() -> ! {
     println!("Running {}", CASE_ID);
 
-    let cpu_count = thread::available_parallelism().unwrap().get();
-    let mut handles = Vec::with_capacity(cpu_count);
-    for cpu_id in 0..cpu_count {
-        handles.push(thread::spawn(move || probe_cpu(cpu_id)));
-    }
-
-    let mut records = handles
-        .into_iter()
-        .map(|handle| handle.join().unwrap())
-        .collect::<Vec<_>>();
+    let cpu_count = smp::cpu_count();
+    // Probe each logical CPU independently so the diff can check both the
+    // per-CPU MPIDR value and whether the guest actually ran where pinned.
+    let mut records = smp::collect_from_each_cpu(cpu_count, probe_cpu);
     records.sort_by_key(|record| record.logical_cpu_id);
 
     let mut records_json = String::from("[");
@@ -153,7 +125,12 @@ fn main() -> ! {
     )
     .unwrap();
 
+    // Emit the result before entering the shutdown path so the runner can
+    // capture a stable output even if VM teardown needs extra host cooperation.
     emit_json_result(CASE_ID, "ok", &diff);
+
+    smp::pin_current_to_cpu(0);
+    smp::start_secondary_vmexit_keepers(cpu_count);
 
     power_off_or_hang();
 }
