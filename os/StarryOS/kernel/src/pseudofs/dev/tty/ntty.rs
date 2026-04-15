@@ -1,5 +1,5 @@
 use alloc::{boxed::Box, collections::VecDeque, sync::Arc};
-use core::task::Waker;
+use core::time::Duration;
 
 use ax_kspin::SpinNoIrq;
 use ax_task::future::register_irq_waker;
@@ -11,6 +11,7 @@ use super::{
 };
 
 pub type NTtyDriver = Tty<Console, Console>;
+const CONSOLE_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 #[derive(Clone, Copy, Default)]
 enum ConsoleEscapeState {
@@ -104,16 +105,18 @@ lazy_static! {
 }
 
 fn new_n_tty() -> Arc<NTtyDriver> {
+    let process_mode = if let Some(irq) = ax_hal::console::irq_num() {
+        ProcessMode::External(Box::new(move |waker| register_irq_waker(irq, &waker)) as _)
+    } else {
+        ProcessMode::Polling(CONSOLE_POLL_INTERVAL)
+    };
+
     Tty::new(
         Arc::default(),
         TtyConfig {
             reader: Console,
             writer: Console,
-            process_mode: ProcessMode::External(if let Some(irq) = ax_hal::console::irq_num() {
-                Box::new(move |waker| register_irq_waker(irq, &waker)) as _
-            } else {
-                Box::new(|waker: Waker| waker.wake_by_ref()) as _
-            }),
+            process_mode,
         },
     )
 }

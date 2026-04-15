@@ -64,6 +64,16 @@ pub fn take_net_devices() -> Vec<DynNetDevice, MAX_NET_DEVICES> {
     core::mem::take(&mut *devices)
 }
 
+#[cfg(feature = "serial")]
+pub fn console_irq_num() -> Option<usize> {
+    serial::console_irq_num()
+}
+
+#[cfg(not(feature = "serial"))]
+pub fn console_irq_num() -> Option<usize> {
+    None
+}
+
 /// maps a mmio physical address to a virtual address.
 pub(crate) fn iomap(addr: PhysAddr, size: usize) -> Result<NonNull<u8>, OnProbeError> {
     axklib::mem::iomap(addr, size)

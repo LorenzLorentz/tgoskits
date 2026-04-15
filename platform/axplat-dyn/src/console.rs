@@ -43,6 +43,6 @@ impl ConsoleIf for ConsoleIfImpl {
     /// Returns `None` if input interrupt is not supported.
     #[cfg(feature = "irq")]
     fn irq_num() -> Option<usize> {
-        None
+        crate::drivers::console_irq_num()
     }
 }

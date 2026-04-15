@@ -4,6 +4,7 @@ use core::{
     ops::Range,
     sync::atomic::{AtomicBool, Ordering},
     task::{Context, Poll, Waker},
+    time::Duration,
 };
 
 use ax_errno::{AxError, AxResult};
@@ -40,6 +41,12 @@ pub enum ProcessMode {
     /// In this mode a dedicated task is spawned to handle inputs. When there's
     /// nothing to read the argument is invoked to register rx waker.
     External(Box<dyn Fn(Waker) + Send + Sync>),
+    /// Spawns a task that periodically polls the input source.
+    ///
+    /// This is used when the underlying console has no input IRQ support. It
+    /// keeps asynchronous input processing semantics without burning a CPU in a
+    /// self-waking loop.
+    Polling(Duration),
     /// Do not process inputs.
     ///
     /// This is only used by the master side of pseudo tty. The argument is the
@@ -274,6 +281,26 @@ impl<R: TtyRead, W: TtyWrite> LineDiscipline<R, W> {
                         }
                     },
                     "tty-reader".into(),
+                );
+                Processor::External(poll_rx)
+            }
+            ProcessMode::Polling(interval) => {
+                let poll_rx = Arc::new(PollSet::new());
+                ax_task::spawn_with_name(
+                    {
+                        let poll_rx = poll_rx.clone();
+                        move || loop {
+                            let mut made_progress = false;
+                            while reader.poll() {
+                                poll_rx.wake();
+                                made_progress = true;
+                            }
+                            if !made_progress {
+                                ax_task::sleep(interval);
+                            }
+                        }
+                    },
+                    "tty-reader-poll".into(),
                 );
                 Processor::External(poll_rx)
             }
