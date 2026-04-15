@@ -125,6 +125,48 @@ def cargo_toml_data(manifest: Path) -> dict[str, Any]:
         return tomllib.load(fh)
 
 
+def normalize_publish_target_value(value: Any) -> str | None:
+    if isinstance(value, str) and value:
+        return value
+    if isinstance(value, list) and len(value) == 1:
+        item = value[0]
+        if isinstance(item, str) and item:
+            return item
+    return None
+
+
+def package_publish_target(pkg: Package) -> str | None:
+    data = cargo_toml_data(pkg.manifest_path)
+    package_data = data.get("package")
+    if not isinstance(package_data, dict):
+        return None
+
+    metadata = package_data.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+
+    docs = metadata.get("docs")
+    if not isinstance(docs, dict):
+        return None
+
+    docs_rs = docs.get("rs")
+    if not isinstance(docs_rs, dict):
+        return None
+
+    default_target = normalize_publish_target_value(docs_rs.get("default-target"))
+    if default_target:
+        return default_target
+
+    targets = docs_rs.get("targets")
+    if isinstance(targets, list):
+        normalized = [target for target in (normalize_publish_target_value([item]) for item in targets) if target]
+        unique_targets = sorted(set(normalized))
+        if len(unique_targets) == 1:
+            return unique_targets[0]
+
+    return None
+
+
 def discover_cargo_manifests(search_root: Path) -> list[Path]:
     repo_root = Path.cwd().resolve()
     manifests: list[Path] = []
@@ -934,9 +976,12 @@ def run_publish_command(
     cmd = [
         "cargo",
         "publish",
-        "-p",
-        pkg.name,
+        "--manifest-path",
+        str(pkg.manifest_path),
     ]
+    publish_target = package_publish_target(pkg)
+    if publish_target is not None:
+        cmd.extend(["--target", publish_target])
     if locked:
         cmd.append("--locked")
     if allow_dirty:

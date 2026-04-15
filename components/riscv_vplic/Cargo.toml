@@ -27,5 +27,5 @@ spin = "0.10"
 riscv-h = "0.4.0"
 
 [package.metadata.docs.rs]
-default-target = ["riscv64gc-unknown-none-elf"]
+default-target = "riscv64gc-unknown-none-elf"
 targets = ["riscv64gc-unknown-none-elf"]
