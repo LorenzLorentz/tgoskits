@@ -1,0 +1,9 @@
+[package]
+name = "arceos-concurrency-stress"
+version = "0.1.0"
+edition.workspace = true
+authors = ["RCore Team <yuchen@tsinghua.edu.cn>"]
+description = "A combined SMP concurrency stress test for ArceOS tasking primitives"
+
+[dependencies]
+ax-std = { workspace = true, features = ["alloc", "multitask", "irq", "sched-rr"], optional = true }

@@ -1,5 +1,7 @@
 use alloc::collections::VecDeque;
 
+#[cfg(feature = "irq")]
+use ax_hal::percpu::this_cpu_id;
 use ax_kernel_guard::{NoOp, NoPreemptIrqSave};
 use ax_kspin::{SpinNoIrq, SpinNoIrqGuard};
 
@@ -62,6 +64,11 @@ impl WaitQueue {
         // Just mark task's current timer ticket ID as expired.
         #[cfg(feature = "irq")]
         if _from_timer_list {
+            log::warn!(
+                "waitq cancel_events(from_timer): task={}, ticket_before_expire={}",
+                curr.id_name(),
+                curr.timer_ticket()
+            );
             curr.timer_ticket_expired();
             // Note:
             //  this task is still not removed from timer list of target CPU,
@@ -173,6 +180,16 @@ impl WaitQueue {
     pub fn notify_one(&self, resched: bool) -> bool {
         let mut wq = self.queue.lock();
         if let Some(task) = wq.pop_front() {
+            #[cfg(feature = "irq")]
+            log::warn!(
+                "waitq notify_one selected waiter: task={}, old_ticket={}, current_cpu={}, \
+                 target_cpu={}, local={}",
+                task.id_name(),
+                task.timer_ticket(),
+                this_cpu_id(),
+                task.cpu_id(),
+                task.cpu_id() == this_cpu_id() as u32
+            );
             unblock_one_task(task, resched);
             true
         } else {
@@ -196,6 +213,16 @@ impl WaitQueue {
     {
         let mut wq = self.queue.lock();
         if let Some(task) = wq.pop_front() {
+            #[cfg(feature = "irq")]
+            log::warn!(
+                "waitq notify_one_with selected waiter: task={}, old_ticket={}, current_cpu={}, \
+                 target_cpu={}, local={}",
+                task.id_name(),
+                task.timer_ticket(),
+                this_cpu_id(),
+                task.cpu_id(),
+                task.cpu_id() == this_cpu_id() as u32
+            );
             func(task.id().as_u64());
             unblock_one_task(task, resched);
             true

@@ -242,6 +242,8 @@ impl<G: BaseGuard> AxRunQueueRef<'_, G> {
     /// which means the task is already unblocked by other cores.
     pub fn unblock_task(&mut self, task: AxTaskRef, resched: bool) {
         let task_id_name = task.id_name();
+        #[cfg(feature = "irq")]
+        let task_for_debug = task.clone();
         // Try to change the state of the task from `Blocked` to `Ready`,
         // if successful, the task will be put into this run queue,
         // otherwise, the task is already unblocked by other cores.
@@ -254,6 +256,13 @@ impl<G: BaseGuard> AxRunQueueRef<'_, G> {
             // Since now, the task to be unblocked is in the `Ready` state.
             let cpu_id = self.inner.cpu_id;
             debug!("task unblock: {task_id_name} on run_queue {cpu_id}");
+            #[cfg(feature = "irq")]
+            task_for_debug.record_unblock_debug(
+                this_cpu_id() as u32,
+                cpu_id as u32,
+                cpu_id != this_cpu_id(),
+                ax_hal::time::monotonic_time_nanos(),
+            );
             // Note: when the task is unblocked on another CPU's run queue,
             // we just ignore the `resched` flag.
             if resched && cpu_id == this_cpu_id() {
@@ -558,6 +567,22 @@ impl AxRunQueue {
         );
         #[cfg(feature = "preempt")]
         next_task.set_preempt_pending(false);
+        #[cfg(feature = "irq")]
+        if let Some((unblock_ns, from_cpu, target_cpu, remote)) = next_task.take_unblock_debug() {
+            let now_ns = ax_hal::time::monotonic_time_nanos();
+            let delay_ns = now_ns.saturating_sub(unblock_ns);
+            if remote || delay_ns > 1_000_000 {
+                log::warn!(
+                    "task running after unblock: task={}, from_cpu={}, target_cpu={}, remote={}, \
+                     delay_ns={}",
+                    next_task.id_name(),
+                    from_cpu,
+                    target_cpu,
+                    remote,
+                    delay_ns
+                );
+            }
+        }
         next_task.set_state(TaskState::Running);
         if prev_task.ptr_eq(&next_task) {
             return;

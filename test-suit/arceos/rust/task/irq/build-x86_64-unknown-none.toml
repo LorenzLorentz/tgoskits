@@ -1,5 +1,5 @@
 features = ["ax-std"]
-log = "Warn"
+log = "Error"
 max_cpu_num = 4
 
 [env]

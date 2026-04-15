@@ -15,6 +15,7 @@ default = []
 ax-task.workspace = true
 ax-kspin.workspace = true
 lock_api.workspace = true
+log.workspace = true
 
 [dev-dependencies]
 ax-sync = { path = ".", features = ["multitask"] }

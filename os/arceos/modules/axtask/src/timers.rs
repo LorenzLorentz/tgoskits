@@ -24,9 +24,16 @@ impl TimerEvent for TaskWakeupEvent {
         // Ignore the timer event if timeout was set but not triggered
         // (wake up by `WaitQueue::notify()`).
         // Judge if this timer event is still valid by checking the ticket ID.
-        if self.task.timer_ticket() != self.ticket_id {
+        let observed_ticket = self.task.timer_ticket();
+        if observed_ticket != self.ticket_id {
             // Timer ticket ID is not matched.
             // Just ignore this timer event and return.
+            log::warn!(
+                "timer callback ignored stale ticket: task={}, event_ticket={}, observed_ticket={}",
+                self.task.id_name(),
+                self.ticket_id,
+                observed_ticket
+            );
             return;
         }
 
@@ -58,6 +65,13 @@ pub(crate) fn set_alarm_wakeup(deadline: TimeValue, task: AxTaskRef) {
     let _g = NoPreemptIrqSave::new();
     TIMER_LIST.with_current(|timer_list| {
         let ticket_id = TIMER_TICKET_ID.fetch_add(1, Ordering::AcqRel);
+        log::warn!(
+            "set_alarm_wakeup: task={}, deadline={:?}, old_ticket={}, new_ticket={}",
+            task.id_name(),
+            deadline,
+            task.timer_ticket(),
+            ticket_id
+        );
         task.set_timer_ticket(ticket_id);
         timer_list.set(deadline, TaskWakeupEvent { ticket_id, task });
     })

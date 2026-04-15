@@ -70,6 +70,13 @@ unsafe impl lock_api::RawMutex for RawMutex {
                     // Wait until someone hands off lock to me or lock is released
                     self.wq
                         .wait_until(|| self.is_owner(current_id) || !self.is_locked());
+                    if !self.is_owner(current_id) && self.is_locked() {
+                        log::warn!(
+                            "mutex waiter woke without ownership: waiter={}, owner_after_wake={}",
+                            current_id,
+                            self.owner_id.load(Ordering::Acquire)
+                        );
+                    }
                     // This check is necessary: some newcomers may race with a wakened one.
                     if self.is_owner(current_id) {
                         break;

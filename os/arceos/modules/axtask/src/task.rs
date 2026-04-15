@@ -81,6 +81,16 @@ pub struct TaskInner {
     #[cfg(feature = "irq")]
     timer_ticket_id: AtomicU64,
 
+    /// Debug-only wakeup tracking for measuring the delay between unblock and running again.
+    #[cfg(feature = "irq")]
+    last_unblock_ns: AtomicU64,
+    #[cfg(feature = "irq")]
+    last_unblock_from_cpu: AtomicU32,
+    #[cfg(feature = "irq")]
+    last_unblock_target_cpu: AtomicU32,
+    #[cfg(feature = "irq")]
+    last_unblock_remote: AtomicBool,
+
     #[cfg(feature = "preempt")]
     need_resched: AtomicBool,
     #[cfg(feature = "preempt")]
@@ -277,6 +287,14 @@ impl TaskInner {
             in_wait_queue: AtomicBool::new(false),
             #[cfg(feature = "irq")]
             timer_ticket_id: AtomicU64::new(0),
+            #[cfg(feature = "irq")]
+            last_unblock_ns: AtomicU64::new(0),
+            #[cfg(feature = "irq")]
+            last_unblock_from_cpu: AtomicU32::new(0),
+            #[cfg(feature = "irq")]
+            last_unblock_target_cpu: AtomicU32::new(0),
+            #[cfg(feature = "irq")]
+            last_unblock_remote: AtomicBool::new(false),
             cpu_id: AtomicU32::new(0),
             #[cfg(feature = "smp")]
             on_cpu: AtomicBool::new(false),
@@ -390,6 +408,12 @@ impl TaskInner {
         // CAN NOT set timer_ticket_id to 0,
         // because 0 is used to indicate the timer event is expired.
         assert!(timer_ticket_id != 0);
+        log::warn!(
+            "task set_timer_ticket: task={}, old_ticket={}, new_ticket={}",
+            self.id_name(),
+            self.timer_ticket(),
+            timer_ticket_id
+        );
         self.timer_ticket_id
             .store(timer_ticket_id, Ordering::Release);
     }
@@ -399,7 +423,45 @@ impl TaskInner {
     #[inline]
     #[cfg(feature = "irq")]
     pub(crate) fn timer_ticket_expired(&self) {
+        log::warn!(
+            "task timer_ticket_expired: task={}, old_ticket={}",
+            self.id_name(),
+            self.timer_ticket()
+        );
         self.timer_ticket_id.store(0, Ordering::Release);
+    }
+
+    #[inline]
+    #[cfg(feature = "irq")]
+    pub(crate) fn record_unblock_debug(
+        &self,
+        from_cpu: u32,
+        target_cpu: u32,
+        remote: bool,
+        now_ns: u64,
+    ) {
+        self.last_unblock_from_cpu
+            .store(from_cpu, Ordering::Release);
+        self.last_unblock_target_cpu
+            .store(target_cpu, Ordering::Release);
+        self.last_unblock_remote.store(remote, Ordering::Release);
+        self.last_unblock_ns.store(now_ns, Ordering::Release);
+    }
+
+    #[inline]
+    #[cfg(feature = "irq")]
+    pub(crate) fn take_unblock_debug(&self) -> Option<(u64, u32, u32, bool)> {
+        let ns = self.last_unblock_ns.swap(0, Ordering::AcqRel);
+        if ns == 0 {
+            None
+        } else {
+            Some((
+                ns,
+                self.last_unblock_from_cpu.load(Ordering::Acquire),
+                self.last_unblock_target_cpu.load(Ordering::Acquire),
+                self.last_unblock_remote.load(Ordering::Acquire),
+            ))
+        }
     }
 
     #[inline]
