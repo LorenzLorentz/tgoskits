@@ -339,6 +339,19 @@ def find_enclosing_workspace_manifest(manifest_path: Path) -> Path | None:
         current = current.parent
 
 
+def find_enclosing_toolchain_file(manifest_path: Path) -> Path | None:
+    current = manifest_path.parent.resolve()
+    repo_root = Path.cwd().resolve()
+    while True:
+        for filename in ("rust-toolchain.toml", "rust-toolchain"):
+            candidate = current / filename
+            if candidate.exists():
+                return candidate.resolve()
+        if current == repo_root or current == current.parent:
+            return None
+        current = current.parent
+
+
 def workspace_table(
     workspace_data: dict[str, Any], section: str, name: str
 ) -> Any | None:
@@ -606,6 +619,13 @@ def stage_publish_manifest(pkg: Package) -> tuple[tempfile.TemporaryDirectory[st
     rel_manifest = pkg.manifest_path.relative_to(Path.cwd())
     stage_manifest = stage_root / rel_manifest
     shutil.copytree(pkg.crate_dir, stage_manifest.parent, dirs_exist_ok=True)
+
+    toolchain_file = find_enclosing_toolchain_file(pkg.manifest_path)
+    if toolchain_file is not None:
+        rel_toolchain = toolchain_file.relative_to(Path.cwd())
+        stage_toolchain = stage_root / rel_toolchain
+        stage_toolchain.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(toolchain_file, stage_toolchain)
 
     normalized_manifest = normalize_manifest_for_publish(pkg)
     stage_manifest.write_text(dump_toml_document(normalized_manifest))
@@ -1284,7 +1304,7 @@ def run_publish_command(
     if allow_dirty:
         cmd.append("--allow-dirty")
     try:
-        return run(cmd, check=False, cwd=Path(staged_tempdir.name))
+        return run(cmd, check=False, cwd=staged_manifest.parent)
     finally:
         staged_tempdir.cleanup()
 
