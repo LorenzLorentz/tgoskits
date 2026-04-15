@@ -525,15 +525,29 @@ def normalize_manifest_for_publish(pkg: Package) -> dict[str, Any]:
     for table_name, table in list(normalized.items()):
         if table_name in ("dependencies", "build-dependencies", "dev-dependencies"):
             if isinstance(table, dict):
-                normalized[table_name] = {
-                    dep_name: normalize_dependency_for_publish(
+                normalized_table: dict[str, Any] = {}
+                for dep_name, dep_spec in table.items():
+                    dep_package_name = dep_name
+                    if isinstance(dep_spec, dict):
+                        merged_spec = merge_workspace_dependency(
+                            dep_spec,
+                            workspace_data=workspace_data,
+                            name=dep_name,
+                        )
+                        if isinstance(merged_spec, dict):
+                            dep_package_name = str(merged_spec.get("package", dep_name))
+                    if dep_package_name == pkg.name:
+                        continue
+                    normalized_table[dep_name] = normalize_dependency_for_publish(
                         pkg.manifest_path,
                         dep_name,
                         dep_spec,
                         workspace_data=workspace_data,
                     )
-                    for dep_name, dep_spec in table.items()
-                }
+                if normalized_table:
+                    normalized[table_name] = normalized_table
+                else:
+                    normalized.pop(table_name, None)
             continue
 
         if table_name != "target" or not isinstance(table, dict):
@@ -549,17 +563,39 @@ def normalize_manifest_for_publish(pkg: Package) -> dict[str, Any]:
                 dep_table = target_table.get(dep_table_name)
                 if not isinstance(dep_table, dict):
                     continue
-                new_target_table[dep_table_name] = {
-                    dep_name: normalize_dependency_for_publish(
+                normalized_dep_table: dict[str, Any] = {}
+                for dep_name, dep_spec in dep_table.items():
+                    dep_package_name = dep_name
+                    if isinstance(dep_spec, dict):
+                        merged_spec = merge_workspace_dependency(
+                            dep_spec,
+                            workspace_data=workspace_data,
+                            name=dep_name,
+                        )
+                        if isinstance(merged_spec, dict):
+                            dep_package_name = str(merged_spec.get("package", dep_name))
+                    if dep_package_name == pkg.name:
+                        continue
+                    normalized_dep_table[dep_table_name] = normalized_dep_table.get(dep_table_name, {})
+                    normalized_dep_table[dep_table_name][dep_name] = normalize_dependency_for_publish(
                         pkg.manifest_path,
                         dep_name,
                         dep_spec,
                         workspace_data=workspace_data,
                     )
-                    for dep_name, dep_spec in dep_table.items()
-                }
-            new_target[target_name] = new_target_table
-        normalized["target"] = new_target
+                if dep_table_name in normalized_dep_table:
+                    new_target_table[dep_table_name] = normalized_dep_table[dep_table_name]
+                else:
+                    new_target_table.pop(dep_table_name, None)
+            if any(
+                not isinstance(value, dict) or value
+                for value in new_target_table.values()
+            ):
+                new_target[target_name] = new_target_table
+        if new_target:
+            normalized["target"] = new_target
+        else:
+            normalized.pop("target", None)
 
     return normalized
 
