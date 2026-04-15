@@ -352,14 +352,14 @@ ax-plat-aarch64-raspi = { version = "0.5.1", path = "components/axplat_crates/pl
 ax-plat-loongarch64-qemu-virt = { version = "0.5.1", path = "components/axplat_crates/platforms/axplat-loongarch64-qemu-virt" }
 ax-plat-riscv64-qemu-virt = { version = "0.5.0", path = "components/axplat_crates/platforms/axplat-riscv64-qemu-virt" }
 ax-plat-x86-pc = { version = "0.5.1", path = "components/axplat_crates/platforms/axplat-x86-pc" }
-ax-driver-base = { version = "0.3.4", path = "components/axdriver_crates/axdriver_base" }
-ax-driver-block = { version = "0.3.4", path = "components/axdriver_crates/axdriver_block" }
-ax-driver-display = { version = "0.3.4", path = "components/axdriver_crates/axdriver_display" }
-ax-driver-input = { version = "0.3.4", path = "components/axdriver_crates/axdriver_input" }
-ax-driver-net = { version = "0.3.4", path = "components/axdriver_crates/axdriver_net" }
-ax-driver-pci = { version = "0.3.4", path = "components/axdriver_crates/axdriver_pci" }
-ax-driver-virtio = { version = "0.3.4", path = "components/axdriver_crates/axdriver_virtio" }
-ax-driver-vsock = { version = "0.3.4", path = "components/axdriver_crates/axdriver_vsock" }
+ax-driver-base = { version = "0.3.5", path = "components/axdriver_crates/axdriver_base" }
+ax-driver-block = { version = "0.3.5", path = "components/axdriver_crates/axdriver_block" }
+ax-driver-display = { version = "0.3.5", path = "components/axdriver_crates/axdriver_display" }
+ax-driver-input = { version = "0.3.5", path = "components/axdriver_crates/axdriver_input" }
+ax-driver-net = { version = "0.3.5", path = "components/axdriver_crates/axdriver_net" }
+ax-driver-pci = { version = "0.3.5", path = "components/axdriver_crates/axdriver_pci" }
+ax-driver-virtio = { version = "0.3.5", path = "components/axdriver_crates/axdriver_virtio" }
+ax-driver-vsock = { version = "0.3.5", path = "components/axdriver_crates/axdriver_vsock" }
 ax-crate-interface = {version = "0.5.0", path = "components/crate_interface" }
 
 # === Other external crates ===

@@ -711,11 +711,11 @@ dependencies = [
 
 [[package]]
 name = "ax-driver-base"
-version = "0.3.4"
+version = "0.3.5"
 
 [[package]]
 name = "ax-driver-block"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "ax-driver-base",
  "bcm2835-sdhci",
@@ -727,14 +727,14 @@ dependencies = [
 
 [[package]]
 name = "ax-driver-display"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "ax-driver-base",
 ]
 
 [[package]]
 name = "ax-driver-input"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "ax-driver-base",
  "strum 0.27.2",
@@ -742,7 +742,7 @@ dependencies = [
 
 [[package]]
 name = "ax-driver-net"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "ax-driver-base",
  "fxmac_rs",
@@ -753,14 +753,14 @@ dependencies = [
 
 [[package]]
 name = "ax-driver-pci"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "virtio-drivers",
 ]
 
 [[package]]
 name = "ax-driver-virtio"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "ax-driver-base",
  "ax-driver-block",
@@ -774,7 +774,7 @@ dependencies = [
 
 [[package]]
 name = "ax-driver-vsock"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "ax-driver-base",
  "log",
