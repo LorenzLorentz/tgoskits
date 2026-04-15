@@ -603,9 +603,9 @@ dependencies = [
 
 [[package]]
 name = "ax-fs-devfs"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "021065415bace6bdb14eea294c957a296835ba00e69cbcdf8d3f2c860919b72d"
+checksum = "bae3583a75387862032a11fa593c5d851f33181707fe4ab34b3a34a46be7457b"
 dependencies = [
  "ax-fs-vfs",
  "log",
@@ -640,9 +640,9 @@ dependencies = [
 
 [[package]]
 name = "ax-fs-ramfs"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f6d973cdd177fd8301c2801354164b94150386e230f115d10a20c365a36dded"
+checksum = "e2538ccfb104301c750d165c333cf311d947d91a454fe627dfe183c59b529738"
 dependencies = [
  "ax-fs-vfs",
  "log",
@@ -651,9 +651,9 @@ dependencies = [
 
 [[package]]
 name = "ax-fs-vfs"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e373da12d565299de8ce238eb24cbb23d82d2c7960aa59fe42ef749cec3db4c"
+checksum = "c35af9694be67eda5372baddf73bcb4f833697d293f92d7f8abd439161d88225"
 dependencies = [
  "ax-errno",
  "bitflags 2.11.0",
@@ -2947,9 +2947,9 @@ dependencies = [
 
 [[package]]
 name = "rsext4"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ecc26a7a22732f5cd14906e3cd81325ced46e8941d93db8cb522ea084fd351d"
+checksum = "9927ef85f2559462a8b931d65bd9423cd5d700b3e87fc02853e60e5212ece120"
 dependencies = [
  "bitflags 2.11.0",
  "lazy_static",
