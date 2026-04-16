@@ -475,7 +475,9 @@ mod tests {
                     assert_eq!(args.arch, "aarch64");
                     assert_eq!(
                         args.case,
-                        Some(PathBuf::from("test-suit/axvisor/cpu-state/aarch64-currentel"))
+                        Some(PathBuf::from(
+                            "test-suit/axvisor/cpu-state/aarch64-currentel"
+                        ))
                     );
                     assert_eq!(args.suite, None);
                 }

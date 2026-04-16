@@ -7,6 +7,10 @@ use std::println;
 
 #[cfg(feature = "smp")]
 pub mod smp;
+#[cfg(feature = "sysreg-sctlr")]
+pub mod sysreg;
+#[cfg(feature = "user-probe")]
+pub mod user_probe;
 
 pub const RESULT_BEGIN_MARKER: &str = "AXTEST_RESULT_BEGIN";
 pub const RESULT_END_MARKER: &str = "AXTEST_RESULT_END";

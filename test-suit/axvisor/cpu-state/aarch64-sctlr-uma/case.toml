@@ -1,0 +1,7 @@
+id = "cpu.aarch64.sctlr.uma"
+interface = "sctlr-el1-uma-controls-el0-daif-access"
+arch = ["aarch64"]
+timeout_secs = 5
+
+[compare]
+mode = "strong"

@@ -6,7 +6,11 @@ authors = ["OpenAI Codex"]
 
 [features]
 ax-std = ["dep:ax-std"]
+user-probe = ["ax-std", "dep:ax-memory-addr", "dep:ax-mm", "ax-mm/copy"]
+sysreg-sctlr = ["ax-std"]
 smp = ["ax-std", "ax-std/alloc", "ax-std/multitask", "ax-std/smp"]
 
 [dependencies]
 ax-std = { workspace = true, optional = true }
+ax-memory-addr = { workspace = true, optional = true }
+ax-mm = { workspace = true, optional = true }

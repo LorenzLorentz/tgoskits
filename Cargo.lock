@@ -1885,9 +1885,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvisor-aarch64-sctlr-dze"
+version = "0.1.0"
+dependencies = [
+ "ax-memory-addr",
+ "ax-mm",
+ "ax-std",
+ "axvisor-guestlib",
+]
+
+[[package]]
+name = "axvisor-aarch64-sctlr-uci"
+version = "0.1.0"
+dependencies = [
+ "ax-memory-addr",
+ "ax-mm",
+ "ax-std",
+ "axvisor-guestlib",
+]
+
+[[package]]
+name = "axvisor-aarch64-sctlr-uct"
+version = "0.1.0"
+dependencies = [
+ "ax-memory-addr",
+ "ax-mm",
+ "ax-std",
+ "axvisor-guestlib",
+]
+
+[[package]]
+name = "axvisor-aarch64-sctlr-uma"
+version = "0.1.0"
+dependencies = [
+ "ax-memory-addr",
+ "ax-mm",
+ "ax-std",
+ "axvisor-guestlib",
+]
+
+[[package]]
 name = "axvisor-guestlib"
 version = "0.1.0"
 dependencies = [
+ "ax-memory-addr",
+ "ax-mm",
  "ax-std",
 ]
 

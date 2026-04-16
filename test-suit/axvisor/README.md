@@ -57,3 +57,7 @@ cargo axvisor test diff \
 | --- | --- | --- | --- | --- | --- | --- |
 | `cpu.aarch64.currentel` | `cpu-state/aarch64-currentel` | `CurrentEL` | `strong` | - | PASS | - |
 | `cpu.aarch64.mpidr` | `cpu-state/aarch64-mpidr` | `MPIDR_EL1` | `strong` | - | PASS | - |
+| `cpu.aarch64.sctlr.dze` | `cpu-state/aarch64-sctlr-dze` | `SCTLR_EL1.DZE -> EL0 DC ZVA` | `strong` | - | PASS | - |
+| `cpu.aarch64.sctlr.uct` | `cpu-state/aarch64-sctlr-uct` | `SCTLR_EL1.UCT -> EL0 CTR_EL0` | `strong` | - | PASS | - |
+| `cpu.aarch64.sctlr.uci` | `cpu-state/aarch64-sctlr-uci` | `SCTLR_EL1.UCI -> EL0 IC IVAU` | `strong` | - | PASS | - |
+| `cpu.aarch64.sctlr.uma` | `cpu-state/aarch64-sctlr-uma` | `SCTLR_EL1.UMA -> EL0 DAIF` | `strong` | - | PASS | - |

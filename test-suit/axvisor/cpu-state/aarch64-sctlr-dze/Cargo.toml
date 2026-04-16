@@ -1,5 +1,5 @@
 [package]
-name = "axvisor-aarch64-currentel"
+name = "axvisor-aarch64-sctlr-dze"
 version = "0.1.0"
 edition.workspace = true
 
@@ -11,6 +11,7 @@ ax-std = [
     "ax-std/uspace",
     "axvisor-guestlib/ax-std",
     "axvisor-guestlib/user-probe",
+    "axvisor-guestlib/sysreg-sctlr",
 ]
 
 [dependencies]

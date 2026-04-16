@@ -1,0 +1,7 @@
+id = "cpu.aarch64.sctlr.dze"
+interface = "sctlr-el1-dze-controls-el0-dc-zva"
+arch = ["aarch64"]
+timeout_secs = 5
+
+[compare]
+mode = "strong"

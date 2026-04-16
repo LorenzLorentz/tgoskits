@@ -8,9 +8,13 @@ extern crate ax_std as std;
 use std::{os::arceos::modules::ax_hal, println, string::String};
 
 use ax_hal::trap::page_fault_handler;
-use ax_memory_addr::{MemoryAddr, PAGE_SIZE_4K, VirtAddr};
-use ax_mm::new_user_aspace;
-use axvisor_guestlib::{emit_json_result, power_off_or_hang};
+use ax_memory_addr::VirtAddr;
+use axvisor_guestlib::{
+    emit_json_result, power_off_or_hang,
+    user_probe::{
+        build_user_aspace, code_blob, install_user_aspace, read_guest_bytes, restore_user_aspace,
+    },
+};
 
 const CASE_ID: &str = "cpu.aarch64.currentel";
 const USER_CODE_START: usize = 0x4_000;
@@ -77,97 +81,19 @@ fn decoded_el(raw: u64) -> u64 {
     (raw >> 2) & 0b11
 }
 
-#[cfg(target_arch = "aarch64")]
-fn sync_executable_range(start: VirtAddr, size: usize) {
-    use core::arch::asm;
-
-    let mut addr = start.as_usize().align_down(64usize);
-    let end = (start.as_usize() + size + 63) & !63usize;
-
-    while addr < end {
-        unsafe {
-            asm!("dc cvau, {addr}", addr = in(reg) addr);
-        }
-        addr += 64;
-    }
-    unsafe {
-        asm!("dsb ish");
-    }
-
-    let mut addr = start.as_usize().align_down(64usize);
-    while addr < end {
-        unsafe {
-            asm!("ic ivau, {addr}", addr = in(reg) addr);
-        }
-        addr += 64;
-    }
-    unsafe {
-        asm!("dsb ish");
-        asm!("isb");
-    }
-}
-
-#[cfg(not(target_arch = "aarch64"))]
-fn sync_executable_range(_start: VirtAddr, _size: usize) {}
-
 fn prepare_user_aspace() -> Result<(ax_mm::AddrSpace, VirtAddr, VirtAddr), &'static str> {
     let code_start = axdiff_currentel_user_entry as *const ();
     let code_end = axdiff_currentel_user_entry_end as *const ();
-    let code_bytes = unsafe {
-        core::slice::from_raw_parts(
-            code_start.cast::<u8>(),
-            (code_end as usize).saturating_sub(code_start as usize),
-        )
-    };
-
-    let user_code_start = VirtAddr::from(USER_CODE_START);
-    let user_shared_start = VirtAddr::from(USER_SHARED_START);
-    let user_stack_start = VirtAddr::from(USER_STACK_START);
-    let user_stack_top = user_stack_start + PAGE_SIZE_4K;
-
-    let base = user_code_start;
-    let end = user_stack_top;
-    let size = end.as_usize() - base.as_usize();
-
-    let mut aspace = new_user_aspace(base, size).map_err(|_| "create_user_aspace")?;
-
-    let code_rw_flags = ax_hal::paging::MappingFlags::READ
-        | ax_hal::paging::MappingFlags::WRITE
-        | ax_hal::paging::MappingFlags::EXECUTE
-        | ax_hal::paging::MappingFlags::USER;
-    let code_rx_flags = ax_hal::paging::MappingFlags::READ
-        | ax_hal::paging::MappingFlags::EXECUTE
-        | ax_hal::paging::MappingFlags::USER;
-    let data_flags = ax_hal::paging::MappingFlags::READ
-        | ax_hal::paging::MappingFlags::WRITE
-        | ax_hal::paging::MappingFlags::USER;
-
-    aspace
-        .map_alloc(user_code_start, PAGE_SIZE_4K, code_rw_flags, true)
-        .map_err(|_| "map_user_code")?;
-    aspace
-        .map_alloc(user_shared_start, PAGE_SIZE_4K, data_flags, true)
-        .map_err(|_| "map_shared_page")?;
-    aspace
-        .map_alloc(user_stack_start, PAGE_SIZE_4K, data_flags, true)
-        .map_err(|_| "map_user_stack")?;
-
-    // Copy a tiny in-memory EL0 payload instead of depending on an external
-    // user binary. This keeps the case self-contained and easy to reproduce.
-    aspace
-        .write(user_code_start, code_bytes)
-        .map_err(|_| "copy_user_code")?;
-    // The shared page is the minimal communication channel from EL0 back to
-    // EL1: the payload records which phase it reached and any visible data.
-    aspace
-        .write(user_shared_start, &[0; 16])
-        .map_err(|_| "clear_shared_page")?;
-    aspace
-        .protect(user_code_start, PAGE_SIZE_4K, code_rx_flags)
-        .map_err(|_| "protect_user_code")?;
-    sync_executable_range(user_code_start, code_bytes.len());
-
-    Ok((aspace, user_stack_top, user_shared_start))
+    let code_bytes = unsafe { code_blob(code_start, code_end) };
+    let prepared = build_user_aspace(
+        code_bytes,
+        VirtAddr::from(USER_CODE_START),
+        VirtAddr::from(USER_SHARED_START),
+        &[0; 16],
+        VirtAddr::from(USER_STACK_START),
+        &[],
+    )?;
+    Ok((prepared.aspace, prepared.stack_top, prepared.shared_start))
 }
 
 fn read_shared_words(
@@ -175,9 +101,7 @@ fn read_shared_words(
     shared_start: VirtAddr,
 ) -> Result<[u64; 2], &'static str> {
     let mut shared = [0u8; 16];
-    aspace
-        .read(shared_start, &mut shared)
-        .map_err(|_| "read_shared_page")?;
+    read_guest_bytes(aspace, shared_start, &mut shared, "read_shared_page")?;
     Ok([
         u64::from_le_bytes(shared[0..8].try_into().unwrap()),
         u64::from_le_bytes(shared[8..16].try_into().unwrap()),
@@ -239,11 +163,7 @@ fn main() -> ! {
 
     // Install the case-local user page table so UserContext::run enters the
     // address space we just built rather than whatever the kernel used before.
-    let old_ttbr0 = ax_hal::asm::read_user_page_table();
-    unsafe {
-        ax_hal::asm::write_user_page_table(user_aspace.page_table_root());
-    }
-    ax_hal::asm::flush_tlb(None);
+    let old_ttbr0 = install_user_aspace(&user_aspace);
 
     let mut uctx = ax_hal::uspace::UserContext::new(
         USER_CODE_START,
@@ -292,10 +212,7 @@ fn main() -> ! {
         );
     }
 
-    unsafe {
-        ax_hal::asm::write_user_page_table(old_ttbr0);
-    }
-    ax_hal::asm::flush_tlb(None);
+    restore_user_aspace(old_ttbr0);
 
     let el1_after = read_current_el();
 

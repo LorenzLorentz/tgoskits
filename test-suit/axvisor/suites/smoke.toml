@@ -4,4 +4,8 @@ name = "axvisor-smoke"
 cases = [
   "cpu-state/aarch64-currentel",
   "cpu-state/aarch64-mpidr",
+  "cpu-state/aarch64-sctlr-dze",
+  "cpu-state/aarch64-sctlr-uct",
+  "cpu-state/aarch64-sctlr-uci",
+  "cpu-state/aarch64-sctlr-uma",
 ]

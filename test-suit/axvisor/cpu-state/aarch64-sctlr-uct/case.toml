@@ -1,0 +1,7 @@
+id = "cpu.aarch64.sctlr.uct"
+interface = "sctlr-el1-uct-controls-el0-ctr-el0"
+arch = ["aarch64"]
+timeout_secs = 5
+
+[compare]
+mode = "strong"

@@ -1,0 +1,7 @@
+id = "cpu.aarch64.sctlr.uci"
+interface = "sctlr-el1-uci-controls-el0-cache-maintenance"
+arch = ["aarch64"]
+timeout_secs = 5
+
+[compare]
+mode = "strong"
