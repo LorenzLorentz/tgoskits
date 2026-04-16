@@ -9,6 +9,11 @@ jobs:
   release-plz-release:
     name: Release-plz release
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}-container:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     if: ${{ github.repository_owner == 'rcore-os' }}
     permissions:
       contents: write
