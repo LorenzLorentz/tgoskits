@@ -10,12 +10,19 @@
 //! covered):
 //!   * `F_SETLKW` and blocking `flock` do not actually block — they return
 //!     `EAGAIN` on conflict, just like the non-blocking variants.
-//!   * POSIX `close(fd)` does NOT release the calling pid's locks on that
-//!     inode (Linux does — see `fcntl(2)` "OFD vs POSIX"). Use OFD locks
-//!     (`F_OFD_*`) for release-on-close. Process *exit* does release the
-//!     exiting pid's POSIX locks — see [`release_pid_locks`].
 //!   * Only `SEEK_SET` is accepted for `l_whence`.
 //!   * Mandatory (kernel-enforced) locking is not supported.
+//!
+//! POSIX release semantics (matching Linux `fs/locks.c`):
+//!   * Process exit drops every POSIX lock the exiting pid still owns,
+//!     across all inodes — see [`release_pid_locks`].
+//!   * Closing **any** fd that refers to an inode drops every POSIX lock
+//!     the calling pid owns on that inode (the well-known POSIX
+//!     "close-eats-locks" rule). Wired through `close(2)`, `close_range(2)`
+//!     and `execve(2)` CLOEXEC — see [`release_inode_posix_locks`].
+//!   * OFD locks are owned by the open file description, so they get
+//!     released automatically when the last reference to that OFD goes
+//!     away (their entries are pruned lazily via `Weak::strong_count`).
 
 use alloc::{
     collections::BTreeMap,
@@ -28,7 +35,7 @@ use ax_errno::{AxError, AxResult};
 use ax_task::current;
 use linux_raw_sys::general::{
     F_GETLK, F_OFD_GETLK, F_OFD_SETLK, F_OFD_SETLKW, F_RDLCK, F_SETLK, F_SETLKW, F_UNLCK, F_WRLCK,
-    LOCK_EX, LOCK_NB, LOCK_SH, LOCK_UN, SEEK_SET, flock64,
+    LOCK_EX, LOCK_NB, LOCK_SH, LOCK_UN, O_ACCMODE, O_RDONLY, O_RDWR, O_WRONLY, SEEK_SET, flock64,
 };
 use spin::RwLock;
 use starry_process::Pid;
@@ -163,6 +170,17 @@ fn kinds_conflict(a: LockKind, b: LockKind) -> bool {
     !(a == LockKind::Read && b == LockKind::Read)
 }
 
+/// Linux requires the fd to be open for the matching access mode before a
+/// POSIX/OFD record lock of that kind may be installed: F_RDLCK needs the
+/// fd to be readable, F_WRLCK needs it to be writable. Mismatch → EBADF.
+fn fd_supports_kind(file: &Arc<dyn FileLike>, kind: LockKind) -> bool {
+    let acc = file.open_flags() & O_ACCMODE;
+    match kind {
+        LockKind::Read => acc == O_RDONLY || acc == O_RDWR,
+        LockKind::Write => acc == O_WRONLY || acc == O_RDWR,
+    }
+}
+
 // ─── fcntl: clear same-owner overlap so we can install a new lock ─────
 
 /// Remove (and split where needed) any same-owner entries on `inode` that
@@ -242,6 +260,10 @@ pub fn fcntl_setlk(fd: c_int, arg: usize, ofd: bool, _wait: bool) -> AxResult<is
     if fl.l_whence as u32 != SEEK_SET {
         return Err(AxError::InvalidInput);
     }
+    // POSIX.1-2024 / Linux: F_OFD_SETLK{,W} require l_pid to be 0.
+    if ofd && fl.l_pid != 0 {
+        return Err(AxError::InvalidInput);
+    }
     let (start, end) = flock_range(fl.l_start, fl.l_len)?;
     let (key, file) = lockable(fd)?;
 
@@ -260,6 +282,14 @@ pub fn fcntl_setlk(fd: c_int, arg: usize, ofd: bool, _wait: bool) -> AxResult<is
         F_WRLCK => Some(LockKind::Write),
         _ => return Err(AxError::InvalidInput),
     };
+
+    // Linux: installing a record lock requires the fd to be open for the
+    // matching access mode. F_UNLCK is exempt — you can always release.
+    if let Some(k) = kind
+        && !fd_supports_kind(&file, k)
+    {
+        return Err(AxError::BadFileDescriptor);
+    }
 
     let mut table = FCNTL_LOCKS.write();
     let (conflict, empty_after) = {
@@ -303,6 +333,10 @@ pub fn fcntl_setlk(fd: c_int, arg: usize, ofd: bool, _wait: bool) -> AxResult<is
 pub fn fcntl_getlk(fd: c_int, arg: usize, ofd: bool) -> AxResult<isize> {
     let fl = UserPtr::<flock64>::from(arg).get_as_mut()?;
     if fl.l_whence as u32 != SEEK_SET {
+        return Err(AxError::InvalidInput);
+    }
+    // POSIX.1-2024 / Linux: F_OFD_GETLK requires l_pid to be 0.
+    if ofd && fl.l_pid != 0 {
         return Err(AxError::InvalidInput);
     }
     let req_kind = match fl.l_type as u32 {
@@ -392,6 +426,30 @@ pub fn release_pid_locks(pid: Pid) {
     });
 }
 
+/// POSIX "close-eats-locks": closing **any** fd referring to an inode
+/// drops every POSIX record lock the calling pid still holds on that
+/// inode, even if the lock was acquired through a different fd. Linux
+/// implements this in `fs/locks.c` via `locks_remove_posix()` driven by
+/// `filp_close()`; we wire the equivalent here from `close_file_like`,
+/// `sys_close_range` and the `execve` CLOEXEC sweep.
+///
+/// OFD entries are owned by the open file description, not the pid, so
+/// they are deliberately left in place — they age out via
+/// `Weak::strong_count` once the underlying `Arc<dyn FileLike>` is gone.
+pub fn release_inode_posix_locks(pid: Pid, key: (u64, u64)) {
+    let mut table = FCNTL_LOCKS.write();
+    let Some(entries) = table.get_mut(&key) else {
+        return;
+    };
+    entries.retain(|e| match &e.owner {
+        FOwner::Posix { pid: p } => *p != pid,
+        FOwner::Ofd { .. } => true,
+    });
+    if entries.is_empty() {
+        table.remove(&key);
+    }
+}
+
 // ─── flock(2) ──────────────────────────────────────────────────────────
 
 /// Implementation of `sys_flock`. Supports `LOCK_SH`, `LOCK_EX`, `LOCK_UN`,
@@ -423,16 +481,17 @@ pub fn flock_op(fd: c_int, operation: c_int) -> AxResult<isize> {
                 false
             }
             Some(want) => {
-                // Check conflict against OTHER OFDs only — leave our own
-                // existing entry in place so a failed upgrade rolls back
-                // to the original lock instead of silently dropping it.
-                let blocked = entries
-                    .iter()
-                    .any(|e| e.addr != addr && kinds_conflict(e.kind, want));
+                // Linux flock(2) conversion is non-atomic: drop our own
+                // existing entry first, THEN check conflicts. A failed
+                // LOCK_NB conversion therefore leaves the file unlocked,
+                // not rolled back to the prior lock — matching
+                // `flock_lock_inode()` in fs/locks.c and the documented
+                // behavior in `man 2 flock` (NOTES, "Converting a lock").
+                entries.retain(|e| e.addr != addr);
+                let blocked = entries.iter().any(|e| kinds_conflict(e.kind, want));
                 if blocked {
                     true
                 } else {
-                    entries.retain(|e| e.addr != addr);
                     entries.push(FlockEntry {
                         addr,
                         weak: Arc::downgrade(&file),

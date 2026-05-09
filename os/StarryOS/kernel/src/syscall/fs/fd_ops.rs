@@ -185,8 +185,8 @@ pub fn sys_close_range(first: i32, last: i32, flags: u32) -> AxResult<isize> {
                 if let Some(f) = fd_table.get_mut(fd as _) {
                     f.cloexec = true;
                 }
-            } else {
-                fd_table.remove(fd as _);
+            } else if let Some(f) = fd_table.remove(fd as _) {
+                crate::file::release_posix_locks_on_close(&f.inner);
             }
         }
     }
@@ -236,7 +236,9 @@ pub fn sys_dup3(old_fd: c_int, new_fd: c_int, flags: c_int) -> AxResult<isize> {
         .ok_or(AxError::BadFileDescriptor)?;
     f.cloexec = flags.contains(Dup3Flags::O_CLOEXEC);
 
-    fd_table.remove(new_fd as _);
+    if let Some(prev) = fd_table.remove(new_fd as _) {
+        crate::file::release_posix_locks_on_close(&prev.inner);
+    }
     fd_table
         .add_at(new_fd as _, f)
         .map_err(|_| AxError::BadFileDescriptor)?;

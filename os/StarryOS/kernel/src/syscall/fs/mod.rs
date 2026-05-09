@@ -12,6 +12,16 @@ mod stat;
 mod timerfd;
 
 pub use self::{
-    ctl::*, event::*, fd_ops::*, io::*, lock::release_pid_locks, memfd::*, mount::*, pidfd::*,
-    pipe::*, signalfd::*, stat::*, timerfd::*,
+    ctl::*,
+    event::*,
+    fd_ops::*,
+    io::*,
+    lock::{release_inode_posix_locks, release_pid_locks},
+    memfd::*,
+    mount::*,
+    pidfd::*,
+    pipe::*,
+    signalfd::*,
+    stat::*,
+    timerfd::*,
 };

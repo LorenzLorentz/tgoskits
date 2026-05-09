@@ -34,6 +34,9 @@ test_commands = [
     "/usr/bin/bug-fcntl-posix-lock",
     "/usr/bin/bug-fcntl-ofd-lock",
     "/usr/bin/bug-fcntl-posix-exit-release",
+    "/usr/bin/bug-fcntl-posix-close-release",
+    "/usr/bin/bug-fcntl-ofd-pid-einval",
+    "/usr/bin/bug-fcntl-fd-mode-ebadf",
     "/usr/bin/bug-flock",
     "/usr/bin/bug-flock-failed-upgrade",
 ]

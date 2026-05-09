@@ -1,20 +1,26 @@
 /*
- * bug-flock-failed-upgrade: flock(2) upgrade from LOCK_SH to LOCK_EX
- * must NOT drop the original LOCK_SH if the upgrade fails.
+ * bug-flock-failed-upgrade: flock(2) lock conversion is non-atomic on
+ * Linux — the calling OFD's existing entry is removed BEFORE the
+ * conflict check, so a failed `LOCK_NB` upgrade leaves the file with
+ * no flock held (see `flock_lock_inode()` in fs/locks.c, and the
+ * "Converting a lock" paragraph in `man 2 flock` NOTES).
  *
- * Buggy implementations remove the holder's existing entry before
- * checking conflicts; if the EX upgrade then loses to a peer's LOCK_SH
- * and returns EWOULDBLOCK, the original LOCK_SH is silently gone and
- * subsequent acquirers see the file as unlocked.
+ * Buggy implementations treat the upgrade as atomic and silently
+ * preserve the old LOCK_SH on conflict, masking races that real Linux
+ * would expose.
  *
  * Layout:
- *   fd1 LOCK_SH            -> ok
- *   fd2 LOCK_SH            -> ok (compatible with fd1)
- *   fd1 LOCK_EX | LOCK_NB  -> EWOULDBLOCK (fd2 is in the way)
- *   close(fd2)             -> only fd1's LOCK_SH should remain
- *   fd3 = open(); fd3 LOCK_EX | LOCK_NB -> EWOULDBLOCK
- *      ^^^ this is the regression: passes only if fd1 still holds SH
- *   fd1 LOCK_UN; fd3 LOCK_EX | LOCK_NB -> ok
+ *   fd1 LOCK_SH                       -> ok
+ *   fd2 LOCK_SH                       -> ok (compatible with fd1)
+ *   fd1 LOCK_EX | LOCK_NB             -> EWOULDBLOCK
+ *      ^^^ fd1's LOCK_SH is gone after this, even though the upgrade
+ *      failed. Linux non-atomic conversion semantics.
+ *   close(fd2)                        -> only fd2's LOCK_SH was left
+ *   fd3 = open(); fd3 LOCK_EX | LOCK_NB -> ok
+ *      ^^^ this is the regression: would FAIL on a buggy implementation
+ *      that preserved fd1's LOCK_SH on the failed upgrade.
+ *   fd1 LOCK_EX | LOCK_NB             -> EWOULDBLOCK (fd3 holds EX)
+ *   fd3 LOCK_UN; fd1 LOCK_EX | LOCK_NB -> ok
  */
 #define _GNU_SOURCE
 #include <errno.h>
@@ -48,37 +54,48 @@ int main(void) {
     r = flock(fd2, LOCK_SH);
     CHECK(r == 0, "fd2 LOCK_SH coexists with fd1 (rc=%d errno=%d)", r, errno);
 
-    /* The failed upgrade. Must not eat fd1's LOCK_SH. */
+    /* The failed upgrade. Linux removes fd1's old LOCK_SH first, then
+     * detects the conflict against fd2 and returns EWOULDBLOCK without
+     * restoring. */
     errno = 0;
     r = flock(fd1, LOCK_EX | LOCK_NB);
     CHECK(r == -1 && errno == EWOULDBLOCK,
           "fd1 LOCK_EX|LOCK_NB returns EWOULDBLOCK (rc=%d errno=%d)", r, errno);
 
-    /* Drop fd2's LOCK_SH so the only remaining holder *should* be fd1. */
+    /* Drop fd2's LOCK_SH. After this, no flock is held on the file
+     * (fd1's LOCK_SH was eaten by the failed upgrade). */
     (void)flock(fd2, LOCK_UN);
     close(fd2);
 
-    /* Fresh OFD via fd3. If fd1's LOCK_SH was preserved, fd3's LOCK_EX
-     * still conflicts. If the bug was present, fd1's LOCK_SH is gone and
-     * fd3 LOCK_EX would succeed — which would FAIL this assertion. */
+    /* Fresh OFD via fd3. With Linux semantics fd1 has no flock, so
+     * fd3 LOCK_EX must succeed. A buggy implementation that preserved
+     * fd1's LOCK_SH on the failed upgrade would have fd3 see EWOULDBLOCK. */
     int fd3 = open(path, O_RDWR);
     if (fd3 < 0) { printf("FAIL: open fd3: %s\n", strerror(errno));
                    close(fd1); unlink(path); return 1; }
 
     errno = 0;
     r = flock(fd3, LOCK_EX | LOCK_NB);
-    CHECK(r == -1 && errno == EWOULDBLOCK,
-          "fd3 LOCK_EX|LOCK_NB still blocked by fd1's preserved LOCK_SH "
-          "(rc=%d errno=%d)", r, errno);
-
-    /* Now drop fd1's LOCK_SH; fd3's LOCK_EX must finally succeed. */
-    (void)flock(fd1, LOCK_UN);
-    r = flock(fd3, LOCK_EX | LOCK_NB);
     CHECK(r == 0,
-          "after fd1 LOCK_UN, fd3 LOCK_EX|LOCK_NB succeeds (rc=%d errno=%d)",
+          "fd3 LOCK_EX|LOCK_NB succeeds — fd1's LOCK_SH was consumed by "
+          "the failed upgrade (rc=%d errno=%d)", r, errno);
+
+    /* fd1 has nothing now; trying to upgrade-from-nothing to EX is
+     * blocked by fd3. */
+    errno = 0;
+    r = flock(fd1, LOCK_EX | LOCK_NB);
+    CHECK(r == -1 && errno == EWOULDBLOCK,
+          "fd1 LOCK_EX|LOCK_NB blocked by fd3's LOCK_EX (rc=%d errno=%d)",
           r, errno);
 
+    /* Drop fd3's LOCK_EX; fd1 can now take it. */
     (void)flock(fd3, LOCK_UN);
+    r = flock(fd1, LOCK_EX | LOCK_NB);
+    CHECK(r == 0,
+          "after fd3 LOCK_UN, fd1 LOCK_EX|LOCK_NB succeeds (rc=%d errno=%d)",
+          r, errno);
+
+    (void)flock(fd1, LOCK_UN);
     close(fd1);
     close(fd3);
     unlink(path);

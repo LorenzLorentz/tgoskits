@@ -252,7 +252,19 @@ pub fn close_file_like(fd: c_int) -> AxResult {
         .remove(fd as usize)
         .ok_or(AxError::BadFileDescriptor)?;
     debug!("close_file_like <= count: {}", Arc::strong_count(&f.inner));
+    release_posix_locks_on_close(&f.inner);
     Ok(())
+}
+
+/// POSIX "close-eats-locks": after dropping `f` from the fd table, ask
+/// the lock subsystem to release any POSIX record locks the calling pid
+/// still owns on the underlying inode.
+pub fn release_posix_locks_on_close(f: &Arc<dyn FileLike>) {
+    let Some(key) = f.inode_key() else {
+        return;
+    };
+    let pid = current().as_thread().proc_data.proc.pid();
+    crate::syscall::release_inode_posix_locks(pid, key);
 }
 
 /// Close all open file descriptors for the current process.
