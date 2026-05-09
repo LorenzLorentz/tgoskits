@@ -56,10 +56,7 @@ pub fn sys_execve(
 
     // Serialize concurrent execve from sibling threads. The loser of the
     // race returns EINTR and is about to be zapped by the winner anyway.
-    let _exec_guard = proc_data
-        .exec_lock
-        .try_lock()
-        .ok_or(AxError::Interrupted)?;
+    let _exec_guard = proc_data.exec_lock.try_lock().ok_or(AxError::Interrupted)?;
 
     // Resolve the path and collect metadata before touching anything.
     let loc = FS_CONTEXT.lock().resolve(&path)?;
