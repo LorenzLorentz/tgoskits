@@ -9,8 +9,9 @@ mod pidfd;
 mod pipe;
 mod signalfd;
 mod stat;
+mod timerfd;
 
 pub use self::{
     ctl::*, event::*, fd_ops::*, io::*, lock::release_pid_locks, memfd::*, mount::*, pidfd::*,
-    pipe::*, signalfd::*, stat::*,
+    pipe::*, signalfd::*, stat::*, timerfd::*,
 };
