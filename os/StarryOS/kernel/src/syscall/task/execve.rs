@@ -54,6 +54,18 @@ pub fn sys_execve(
     let proc_data = &curr.as_thread().proc_data;
     let my_tid = curr.id().as_u64() as Pid;
 
+    // Linux semantics: a non-leader execve must transfer the leader
+    // identity (PID/TGID/PGID/SID) to the calling thread via de_thread's
+    // `exchange_tids`/`transfer_pid` dance, and zap the original leader.
+    // Implementing that requires mutable TIDs in `ax_task::TaskInner` and
+    // a rewrite of all four PID tables, so for now we surface EPERM and
+    // leave a note. Single-threaded callers and the common multi-threaded
+    // case (leader calls exec) work as intended.
+    // TODO: implement de_thread leader transfer for non-leader execve.
+    if my_tid != proc_data.proc.pid() {
+        return Err(AxError::OperationNotPermitted);
+    }
+
     // Serialize concurrent execve from sibling threads. The loser of the
     // race returns EINTR and is about to be zapped by the winner anyway.
     let _exec_guard = proc_data.exec_lock.try_lock().ok_or(AxError::Interrupted)?;
