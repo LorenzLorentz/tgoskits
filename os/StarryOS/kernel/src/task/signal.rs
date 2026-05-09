@@ -24,6 +24,14 @@ pub fn check_signals(
     restore_blocked: Option<SignalSet>,
     restart_info: Option<&SyscallRestartInfo>,
 ) -> bool {
+    // Honor zap requests before consulting the signal queue. A sibling
+    // performing `execve` set this flag, and we must do a thread-only
+    // exit (no `group_exit`) so the new image is left intact.
+    if thr.pending_exit_request() {
+        do_exit(0, false);
+        return true;
+    }
+
     let Some((sig, os_action)) =
         thr.signal
             .check_signals_with(uctx, restore_blocked, |uctx, _sig, restartable| {

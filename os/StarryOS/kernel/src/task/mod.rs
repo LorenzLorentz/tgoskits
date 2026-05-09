@@ -116,6 +116,11 @@ pub struct Thread {
     /// Self exit event
     pub exit_event: Arc<PollSet>,
 
+    /// Set by `sys_execve` when reaping sibling threads. The signal-check
+    /// path turns this into a thread-only `do_exit(0, false)` — no group
+    /// exit, no fatal-signal cascade — so the new image is left intact.
+    exit_request: AtomicBool,
+
     /// The registered rseq area pointer (user address) for restartable
     /// sequences (`rseq(2)`).
     rseq_area: AtomicUsize,
@@ -145,6 +150,7 @@ impl Thread {
             accessing_user_memory: AtomicBool::new(false),
             block_next_signal_check: NextSignalCheckBlock::new(),
             exit_event: Arc::default(),
+            exit_request: AtomicBool::new(false),
             rseq_area: AtomicUsize::new(0),
             pdeathsig: AtomicU32::new(0),
             cred: SpinNoIrq::new(cred),
@@ -191,6 +197,17 @@ impl Thread {
     /// Set the thread to exit.
     pub fn set_exit(&self) {
         self.exit.store(true, Ordering::Release);
+    }
+
+    /// True if a thread-only exit has been requested via `set_exit_request`.
+    pub fn pending_exit_request(&self) -> bool {
+        self.exit_request.load(Ordering::Acquire)
+    }
+
+    /// Request a thread-only exit. Honored by `check_signals` on the next
+    /// return to user space, where it routes to `do_exit(0, false)`.
+    pub fn set_exit_request(&self) {
+        self.exit_request.store(true, Ordering::Release);
     }
 
     /// Check if the thread is accessing user memory.
@@ -344,6 +361,13 @@ pub struct ProcessData {
     pub child_exit_event: Arc<PollSet>,
     /// Self exit event
     pub exit_event: Arc<PollSet>,
+    /// Woken every time a thread in this process exits. Used by a thread
+    /// performing `execve` to wait for siblings to be reaped.
+    pub thread_exit_event: Arc<PollSet>,
+    /// Serializes `execve` within the process. Only one thread can be
+    /// tearing down the thread group at a time; concurrent attempts return
+    /// `EINTR` (the loser is about to be zapped anyway).
+    pub exec_lock: Mutex<()>,
     /// The exit signal of the thread
     pub exit_signal: Option<Signo>,
 
@@ -391,6 +415,8 @@ impl ProcessData {
 
             child_exit_event: Arc::default(),
             exit_event: Arc::default(),
+            thread_exit_event: Arc::default(),
+            exec_lock: Mutex::new(()),
             exit_signal,
 
             signal: Arc::new(ProcessSignalManager::new(

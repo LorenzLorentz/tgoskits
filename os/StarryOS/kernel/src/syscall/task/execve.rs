@@ -1,18 +1,19 @@
 use alloc::{string::ToString, sync::Arc, vec::Vec};
-use core::ffi::c_char;
+use core::{ffi::c_char, future::poll_fn, task::Poll};
 
 use ax_errno::{AxError, AxResult};
 use ax_fs::FS_CONTEXT;
 use ax_hal::uspace::UserContext;
 use ax_sync::Mutex;
-use ax_task::current;
+use ax_task::{current, future::block_on};
+use starry_process::Pid;
 use starry_vm::vm_load_until_nul;
 
 use crate::{
     config::USER_HEAP_BASE,
     file::FD_TABLE,
     mm::{copy_from_kernel, load_user_app, new_user_aspace_empty, vm_load_string},
-    task::AsThread,
+    task::{AsThread, zap_thread},
 };
 
 pub fn sys_execve(
@@ -51,12 +52,14 @@ pub fn sys_execve(
 
     let curr = current();
     let proc_data = &curr.as_thread().proc_data;
+    let my_tid = curr.id().as_u64() as Pid;
 
-    if proc_data.proc.threads().len() > 1 {
-        // TODO: handle multi-thread case
-        error!("sys_execve: multi-thread not supported");
-        return Err(AxError::WouldBlock);
-    }
+    // Serialize concurrent execve from sibling threads. The loser of the
+    // race returns EINTR and is about to be zapped by the winner anyway.
+    let _exec_guard = proc_data
+        .exec_lock
+        .try_lock()
+        .ok_or(AxError::Interrupted)?;
 
     // Resolve the path and collect metadata before touching anything.
     let loc = FS_CONTEXT.lock().resolve(&path)?;
@@ -67,7 +70,10 @@ pub fn sys_execve(
     // Loading into a fresh aspace (rather than clearing the existing one)
     // ensures a CLONE_VM parent's mappings are never disturbed —
     // posix_spawn uses CLONE_VM|CLONE_VFORK and runs the child on a stack
-    // slice inside the parent's address space.
+    // slice inside the parent's address space. The fully-loaded aspace
+    // also acts as the bprm-equivalent: the executable contents are
+    // pinned now, so the post-teardown commit phase doesn't re-resolve
+    // the pathname (the FS could change while siblings are being reaped).
     let mut new_aspace = new_user_aspace_empty()?;
     copy_from_kernel(&mut new_aspace)?;
     let (entry_point, user_stack_base) =
@@ -81,6 +87,70 @@ pub fn sys_execve(
             .filter(|it| fd_table.get(*it).unwrap().cloexec)
             .collect()
     };
+
+    // ----------------------------------------------------------------
+    // Sibling teardown (multi-thread only).
+    // Zap each sibling so it does a thread-only `do_exit(0, false)` —
+    // not a process-fatal SIGKILL — and wait until the thread group
+    // contains only the caller before committing.
+    //
+    // The wait is *not* interruptible: once siblings are zapped the
+    // teardown is irreversible, and EINTR here would leave the process
+    // partially de-threaded but still running on the old aspace. Any
+    // self-fatal signal targeting the caller will be delivered after
+    // the commit phase via the user-space return path.
+    //
+    // Re-snapshot every iteration: a sibling may have spawned yet
+    // another thread between our zap broadcast and its own exit, and
+    // that new thread's tid wasn't visible last time around.
+    // ----------------------------------------------------------------
+    loop {
+        let siblings: Vec<Pid> = proc_data
+            .proc
+            .threads()
+            .into_iter()
+            .filter(|tid| *tid != my_tid)
+            .collect();
+        if siblings.is_empty() {
+            break;
+        }
+
+        info!(
+            "sys_execve: zapping {} sibling thread(s) before exec",
+            siblings.len()
+        );
+        for tid in &siblings {
+            // Best-effort: target may already be reaped.
+            let _ = zap_thread(*tid);
+        }
+
+        block_on(poll_fn(|cx| {
+            let remaining = proc_data
+                .proc
+                .threads()
+                .into_iter()
+                .filter(|tid| *tid != my_tid)
+                .count();
+            if remaining == 0 {
+                return Poll::Ready(());
+            }
+            proc_data.thread_exit_event.register(cx.waker());
+            // Re-check after registering: a sibling could have exited
+            // between the first check and the register, and the wake
+            // that fired then would have found an empty waker set.
+            let remaining = proc_data
+                .proc
+                .threads()
+                .into_iter()
+                .filter(|tid| *tid != my_tid)
+                .count();
+            if remaining == 0 {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        }));
+    }
 
     // ----------------------------------------------------------------
     // Phase 2: point of no return — commit all changes.

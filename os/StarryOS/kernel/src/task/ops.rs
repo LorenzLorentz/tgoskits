@@ -287,6 +287,7 @@ pub fn do_exit(exit_code: i32, group_exit: bool) {
         crate::syscall::clear_proc_shm(process.pid(), &thr.proc_data.aspace());
     }
     thr.exit_event.wake();
+    thr.proc_data.thread_exit_event.wake();
 
     if group_exit && !process.is_group_exited() {
         process.group_exit();
@@ -296,4 +297,22 @@ pub fn do_exit(exit_code: i32, group_exit: bool) {
         }
     }
     thr.set_exit();
+}
+
+/// Request a sibling thread to exit with thread-only semantics.
+///
+/// Sets the target's `exit_request` flag and interrupts it. On its next
+/// return to user space, `check_signals` observes the flag and routes to
+/// `do_exit(0, false)` — no `group_exit`, no fatal-signal cascade. Used by
+/// `sys_execve` to reap siblings without dragging the calling thread (or
+/// the soon-to-be-loaded image) into a process-fatal exit.
+///
+/// Best-effort: returns `Err` if the target tid is already gone or no
+/// longer a user thread; callers should treat that as "already reaped".
+pub fn zap_thread(tid: Pid) -> AxResult<()> {
+    let task = get_task(tid)?;
+    let thr = task.try_as_thread().ok_or(AxError::OperationNotPermitted)?;
+    thr.set_exit_request();
+    task.interrupt();
+    Ok(())
 }
