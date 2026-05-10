@@ -252,19 +252,35 @@ pub fn close_file_like(fd: c_int) -> AxResult {
         .remove(fd as usize)
         .ok_or(AxError::BadFileDescriptor)?;
     debug!("close_file_like <= count: {}", Arc::strong_count(&f.inner));
-    release_posix_locks_on_close(&f.inner);
+    release_locks_on_close(f);
     Ok(())
 }
 
-/// POSIX "close-eats-locks": after dropping `f` from the fd table, ask
-/// the lock subsystem to release any POSIX record locks the calling pid
-/// still owns on the underlying inode.
-pub fn release_posix_locks_on_close(f: &Arc<dyn FileLike>) {
-    let Some(key) = f.inode_key() else {
-        return;
-    };
-    let pid = current().as_thread().proc_data.proc.pid();
-    crate::syscall::release_inode_posix_locks(pid, key);
+/// Close-time advisory-lock cleanup (the kernel side of POSIX
+/// "close-eats-locks", plus OFD release-on-last-close):
+///
+///   1. Drop every POSIX record lock the calling pid owns on the inode
+///      (Linux `locks_remove_posix()` driven by `filp_close()`).
+///   2. Drop the `FileDescriptor` so the `Arc<dyn FileLike>` ref
+///      count goes down — if this was the last reference, any OFD locks
+///      held against the now-dead OFD are released (their entries are
+///      pruned the next time something walks the table).
+///   3. Wake `F_SETLKW`/`F_OFD_SETLKW` waiters parked on this inode so
+///      they can re-check whether the freed range now lets them through.
+///
+/// `fd` is taken by value so the `Arc` actually drops before step 3 — a
+/// pre-drop wake would leave the waiter to re-check, see the OFD's
+/// `Weak` still alive, and sleep forever.
+pub fn release_locks_on_close(fd: FileDescriptor) {
+    let key = fd.inner.inode_key();
+    if let Some(k) = key {
+        let pid = current().as_thread().proc_data.proc.pid();
+        crate::syscall::release_inode_posix_locks(pid, k);
+    }
+    drop(fd);
+    if let Some(k) = key {
+        crate::syscall::wake_lock_waiters(k);
+    }
 }
 
 /// Close all open file descriptors for the current process.
@@ -291,9 +307,23 @@ pub fn close_all_fds() {
     }
     drop(table);
 
+    // Snapshot inode keys before drop so we can wake F_SETLKW waiters
+    // afterwards: the Arc drops here may release OFD locks (their owner
+    // weak-refs go dead), and a parked waiter has no other way to learn
+    // about it. POSIX locks owned by this pid are released separately by
+    // `release_pid_locks`, which already wakes; the inode-key dedup
+    // means the per-inode wake is at most O(fds) and harmless when
+    // double-fired.
+    let lock_keys: alloc::vec::Vec<(u64, u64)> = removed
+        .iter()
+        .filter_map(|fd| fd.inner.inode_key())
+        .collect();
     // Drop removed descriptors after releasing FD_TABLE lock to avoid
     // lock re-entry or side effects from destructor paths.
     drop(removed);
+    for key in lock_keys {
+        crate::syscall::wake_lock_waiters(key);
+    }
 }
 
 pub fn add_stdio(fd_table: &mut FlattenObjects<FileDescriptor, AX_FILE_LIMIT>) -> AxResult<()> {

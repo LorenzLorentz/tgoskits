@@ -115,7 +115,7 @@ pub fn sys_execve(
     let mut fd_table = FD_TABLE.write();
     for fd in cloexec_fds {
         if let Some(f) = fd_table.remove(fd) {
-            crate::file::release_posix_locks_on_close(&f.inner);
+            crate::file::release_locks_on_close(f);
         }
     }
     drop(fd_table);

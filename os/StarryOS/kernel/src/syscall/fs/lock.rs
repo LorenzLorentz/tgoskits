@@ -8,10 +8,14 @@
 //!
 //! Limitations versus Linux (intentional, see fcntl bug-cases for what is
 //! covered):
-//!   * `F_SETLKW` and blocking `flock` do not actually block — they return
-//!     `EAGAIN` on conflict, just like the non-blocking variants.
-//!   * Only `SEEK_SET` is accepted for `l_whence`.
+//!   * Blocking `flock(2)` (without `LOCK_NB`) returns `EAGAIN` on
+//!     conflict instead of waiting. `F_SETLKW`/`F_OFD_SETLKW` *do* block,
+//!     using the per-inode wait queue maintained here.
+//!   * Only `SEEK_SET` is accepted for `l_whence` (no SEEK_CUR/SEEK_END).
 //!   * Mandatory (kernel-enforced) locking is not supported.
+//!   * `EDEADLK` deadlock detection on `F_SETLKW` is not implemented;
+//!     a circular wait will block forever (or until a signal arrives,
+//!     which delivers `EINTR` as POSIX requires).
 //!
 //! POSIX release semantics (matching Linux `fs/locks.c`):
 //!   * Process exit drops every POSIX lock the exiting pid still owns,
@@ -43,7 +47,7 @@ use starry_process::Pid;
 use crate::{
     file::{FileLike, get_file_like},
     mm::UserPtr,
-    task::AsThread,
+    task::{AsThread, WaitQueue},
 };
 
 type InodeKey = (u64, u64); // (device, inode_no)
@@ -112,6 +116,12 @@ struct FLockEntry {
 /// fcntl POSIX + OFD locks share one space.
 static FCNTL_LOCKS: RwLock<BTreeMap<InodeKey, Vec<FLockEntry>>> = RwLock::new(BTreeMap::new());
 
+/// Per-inode waiters parked by `F_SETLKW`/`F_OFD_SETLKW` until a
+/// conflicting lock is released. Wakers are called from every code path
+/// that may shrink an inode's `FCNTL_LOCKS` entries (explicit `F_UNLCK`,
+/// process exit, close-eats-locks, OFD release on last close).
+static LOCK_WAITERS: RwLock<BTreeMap<InodeKey, Arc<WaitQueue>>> = RwLock::new(BTreeMap::new());
+
 #[derive(Debug)]
 struct FlockEntry {
     addr: OfdAddr,
@@ -142,23 +152,30 @@ fn lockable(fd: c_int) -> AxResult<(InodeKey, Arc<dyn FileLike>)> {
 }
 
 /// Translate the `flock64.l_start` / `l_len` pair into a half-open
-/// `[start, end)` range. `l_len == 0` means "to end of file"; we model
-/// that as `i64::MAX`. Negative `l_len` (lock backwards from `l_start`)
-/// is rejected for now — Linux supports it but no test in this tree
-/// requires it.
+/// `[start, end)` range, matching Linux `flock_to_posix_lock()`:
+///   * `l_len > 0` — `[l_start, l_start + l_len)`.
+///   * `l_len == 0` — `[l_start, i64::MAX)` (to end of file).
+///   * `l_len < 0` — `[l_start + l_len, l_start)` (reverse range; the
+///     resolved start must be non-negative).
+/// Any overflow or a resolved start < 0 returns `EINVAL`.
 fn flock_range(l_start: i64, l_len: i64) -> AxResult<(i64, i64)> {
-    if l_start < 0 {
-        return Err(AxError::InvalidInput);
-    }
-    if l_len < 0 {
-        return Err(AxError::InvalidInput);
-    }
     if l_len == 0 {
-        Ok((l_start, i64::MAX))
-    } else {
-        let end = l_start.checked_add(l_len).ok_or(AxError::InvalidInput)?;
-        Ok((l_start, end))
+        if l_start < 0 {
+            return Err(AxError::InvalidInput);
+        }
+        return Ok((l_start, i64::MAX));
     }
+    let (start, end) = if l_len > 0 {
+        let end = l_start.checked_add(l_len).ok_or(AxError::InvalidInput)?;
+        (l_start, end)
+    } else {
+        let start = l_start.checked_add(l_len).ok_or(AxError::InvalidInput)?;
+        (start, l_start)
+    };
+    if start < 0 {
+        return Err(AxError::InvalidInput);
+    }
+    Ok((start, end))
 }
 
 fn ranges_overlap(a_start: i64, a_end: i64, b_start: i64, b_end: i64) -> bool {
@@ -250,12 +267,110 @@ fn find_conflict<'a>(
     })
 }
 
+// ─── per-inode wait queue (F_SETLKW backbone) ──────────────────────────
+
+/// Get-or-create the wait queue for a single inode. We never garbage
+/// collect entries from `LOCK_WAITERS`: a wait queue carries no per-task
+/// state once it is empty, and waiters always re-check conflict after
+/// being woken, so a stale (but empty) queue costs nothing.
+fn lock_waiters(key: InodeKey) -> Arc<WaitQueue> {
+    if let Some(wq) = LOCK_WAITERS.read().get(&key) {
+        return wq.clone();
+    }
+    LOCK_WAITERS
+        .write()
+        .entry(key)
+        .or_insert_with(|| Arc::new(WaitQueue::new()))
+        .clone()
+}
+
+/// Wake every task parked on `key`. MUST be called without `FCNTL_LOCKS`
+/// held to keep the lock order `WaitQueue → FCNTL_LOCKS`: waiters take
+/// the wait-queue mutex first and the table lock second from inside
+/// `wait_if`'s condition closure, so a waker that already held the
+/// table lock would invert that order and deadlock.
+pub fn wake_lock_waiters(key: InodeKey) {
+    let wq = LOCK_WAITERS.read().get(&key).cloned();
+    if let Some(wq) = wq {
+        wq.wake(usize::MAX, !0);
+    }
+}
+
 // ─── fcntl entry points ────────────────────────────────────────────────
 
+/// Build a fresh `FOwner` for the calling thread. Called per attempt
+/// inside the F_SETLKW retry loop because OFD owners snapshot the
+/// `Weak<dyn FileLike>` and Posix owners need the *current* pid (which
+/// won't change for a single thread, but cloning is trivial).
+fn make_owner(ofd: bool, file: &Arc<dyn FileLike>) -> FOwner {
+    if ofd {
+        FOwner::Ofd {
+            addr: ofd_addr(file),
+            weak: Arc::downgrade(file),
+        }
+    } else {
+        FOwner::Posix { pid: current_pid() }
+    }
+}
+
+/// Result of one attempt to install / clear a record lock. Carried out
+/// of the FCNTL_LOCKS critical section so any wakeups happen with the
+/// table lock released.
+enum SetlkAttempt {
+    Done { woke_others: bool },
+    Conflict,
+}
+
+fn try_setlk_once(
+    key: InodeKey,
+    owner: FOwner,
+    start: i64,
+    end: i64,
+    kind: Option<LockKind>,
+) -> SetlkAttempt {
+    let mut table = FCNTL_LOCKS.write();
+    let entries = table.entry(key).or_default();
+    entries.retain(|e| !e.owner.is_dead());
+
+    let attempt = match kind {
+        None => {
+            let before = entries.len();
+            clear_owner_overlap(entries, &owner, start, end);
+            SetlkAttempt::Done {
+                woke_others: entries.len() != before,
+            }
+        }
+        Some(k) => {
+            if find_conflict(entries, &owner, start, end, k).is_some() {
+                SetlkAttempt::Conflict
+            } else {
+                let before = entries.len();
+                clear_owner_overlap(entries, &owner, start, end);
+                let woke_due_clear = entries.len() != before;
+                entries.push(FLockEntry {
+                    start,
+                    end,
+                    kind: k,
+                    owner,
+                });
+                SetlkAttempt::Done {
+                    woke_others: woke_due_clear,
+                }
+            }
+        }
+    };
+    if entries.is_empty() {
+        table.remove(&key);
+    }
+    attempt
+}
+
 /// Common impl for `F_SETLK` / `F_SETLKW` (POSIX) and `F_OFD_SETLK` /
-/// `F_OFD_SETLKW` (OFD). Blocking is *not* implemented; `_wait` is
-/// accepted for ABI completeness but never blocks.
-pub fn fcntl_setlk(fd: c_int, arg: usize, ofd: bool, _wait: bool) -> AxResult<isize> {
+/// `F_OFD_SETLKW` (OFD). When `wait` is true, the caller blocks on the
+/// per-inode wait queue until the conflict clears or a signal arrives
+/// (returning `EINTR` per POSIX). When `wait` is false, conflicts return
+/// `EAGAIN` immediately.
+pub fn fcntl_setlk(fd: c_int, arg: usize, ofd: bool, wait: bool) -> AxResult<isize> {
     let fl = UserPtr::<flock64>::from(arg).get_as_mut()?;
     if fl.l_whence as u32 != SEEK_SET {
         return Err(AxError::InvalidInput);
@@ -266,15 +381,6 @@ pub fn fcntl_setlk(fd: c_int, arg: usize, ofd: bool, _wait: bool) -> AxResult<is
     }
     let (start, end) = flock_range(fl.l_start, fl.l_len)?;
     let (key, file) = lockable(fd)?;
-
-    let owner = if ofd {
-        FOwner::Ofd {
-            addr: ofd_addr(&file),
-            weak: Arc::downgrade(&file),
-        }
-    } else {
-        FOwner::Posix { pid: current_pid() }
-    };
 
     let kind = match fl.l_type as u32 {
         F_UNLCK => None,
@@ -291,40 +397,43 @@ pub fn fcntl_setlk(fd: c_int, arg: usize, ofd: bool, _wait: bool) -> AxResult<is
         return Err(AxError::BadFileDescriptor);
     }
 
-    let mut table = FCNTL_LOCKS.write();
-    let (conflict, empty_after) = {
-        let entries = table.entry(key).or_default();
-        entries.retain(|e| !e.owner.is_dead());
-
-        let conflict = match kind {
-            None => {
-                clear_owner_overlap(entries, &owner, start, end);
-                false
-            }
-            Some(k) => {
-                if find_conflict(entries, &owner, start, end, k).is_some() {
-                    true
-                } else {
-                    clear_owner_overlap(entries, &owner, start, end);
-                    entries.push(FLockEntry {
-                        start,
-                        end,
-                        kind: k,
-                        owner,
-                    });
-                    false
+    loop {
+        let owner = make_owner(ofd, &file);
+        match try_setlk_once(key, owner, start, end, kind) {
+            SetlkAttempt::Done { woke_others } => {
+                if woke_others {
+                    wake_lock_waiters(key);
                 }
+                return Ok(0);
             }
-        };
-        (conflict, entries.is_empty())
-    };
-    if empty_after {
-        table.remove(&key);
+            SetlkAttempt::Conflict => {
+                if !wait {
+                    return Err(AxError::WouldBlock);
+                }
+                // Park on the inode's wait queue. The condition re-checks
+                // conflict while holding only the wq mutex (which itself
+                // takes FCNTL_LOCKS internally) so there is no chance of
+                // missing a wakeup that lands between our outer attempt
+                // and the sleep.
+                let wq = lock_waiters(key);
+                wq.wait_if(!0u32, None, || {
+                    let mut table = FCNTL_LOCKS.write();
+                    let Some(entries) = table.get_mut(&key) else {
+                        return false;
+                    };
+                    entries.retain(|e| !e.owner.is_dead());
+                    let owner = make_owner(ofd, &file);
+                    let still_blocked = find_conflict(entries, &owner, start, end, kind.unwrap())
+                        .is_some();
+                    if entries.is_empty() {
+                        table.remove(&key);
+                    }
+                    still_blocked
+                })?;
+                // Loop and retry.
+            }
+        }
     }
-    if conflict {
-        return Err(AxError::WouldBlock);
-    }
-    Ok(0)
 }
 
 /// Common impl for `F_GETLK` (POSIX) and `F_OFD_GETLK` (OFD). Reports the
@@ -416,14 +525,25 @@ pub fn dispatch_fcntl(fd: c_int, cmd: c_int, arg: usize) -> Option<AxResult<isiz
 /// file description, which is already cleaned up by `close_all_fds`
 /// dropping the underlying `Arc<dyn FileLike>`.
 pub fn release_pid_locks(pid: Pid) {
-    let mut table = FCNTL_LOCKS.write();
-    table.retain(|_inode, entries| {
-        entries.retain(|e| match &e.owner {
-            FOwner::Posix { pid: p } => *p != pid,
-            FOwner::Ofd { .. } => true,
+    let mut affected: Vec<InodeKey> = Vec::new();
+    {
+        let mut table = FCNTL_LOCKS.write();
+        table.retain(|inode, entries| {
+            let before = entries.len();
+            entries.retain(|e| match &e.owner {
+                FOwner::Posix { pid: p } => *p != pid,
+                FOwner::Ofd { .. } => true,
+            });
+            if entries.len() != before {
+                affected.push(*inode);
+            }
+            !entries.is_empty()
         });
-        !entries.is_empty()
-    });
+    }
+    // Wake outside the table-lock critical section to keep lock order.
+    for key in affected {
+        wake_lock_waiters(key);
+    }
 }
 
 /// POSIX "close-eats-locks": closing **any** fd referring to an inode
@@ -437,16 +557,24 @@ pub fn release_pid_locks(pid: Pid) {
 /// they are deliberately left in place — they age out via
 /// `Weak::strong_count` once the underlying `Arc<dyn FileLike>` is gone.
 pub fn release_inode_posix_locks(pid: Pid, key: (u64, u64)) {
-    let mut table = FCNTL_LOCKS.write();
-    let Some(entries) = table.get_mut(&key) else {
-        return;
+    let woke_someone = {
+        let mut table = FCNTL_LOCKS.write();
+        let Some(entries) = table.get_mut(&key) else {
+            return;
+        };
+        let before = entries.len();
+        entries.retain(|e| match &e.owner {
+            FOwner::Posix { pid: p } => *p != pid,
+            FOwner::Ofd { .. } => true,
+        });
+        let changed = entries.len() != before;
+        if entries.is_empty() {
+            table.remove(&key);
+        }
+        changed
     };
-    entries.retain(|e| match &e.owner {
-        FOwner::Posix { pid: p } => *p != pid,
-        FOwner::Ofd { .. } => true,
-    });
-    if entries.is_empty() {
-        table.remove(&key);
+    if woke_someone {
+        wake_lock_waiters(key);
     }
 }
 

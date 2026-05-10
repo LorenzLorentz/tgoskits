@@ -16,7 +16,7 @@ pub use self::{
     event::*,
     fd_ops::*,
     io::*,
-    lock::{release_inode_posix_locks, release_pid_locks},
+    lock::{release_inode_posix_locks, release_pid_locks, wake_lock_waiters},
     memfd::*,
     mount::*,
     pidfd::*,
