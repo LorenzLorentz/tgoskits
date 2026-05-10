@@ -28,22 +28,29 @@ pub fn sys_execve(
     // ----------------------------------------------------------------
     let path = vm_load_string(path)?;
 
-    // Linux rejects NULL `argv`/`envp` with EFAULT — they are required
-    // user pointers, not optional, and the kernel does not silently
-    // substitute an empty list. (See `__do_execve_file` -> `bprm_init`.)
-    if argv.is_null() || envp.is_null() {
-        return Err(AxError::BadAddress);
-    }
+    // Linux's `count_strings_kernel` (fs/exec.c) checks
+    // `argv.ptr.native` for NULL and short-circuits to `i=0` rather
+    // than returning EFAULT. glibc's `execl(path, NULL)` and
+    // `execve(path, NULL, NULL)` rely on this: userspace passes NULL
+    // to mean "empty argv/envp" and we must accept it for ABI
+    // compatibility. (Same handling for `envp`.)
+    let args = if argv.is_null() {
+        Vec::new()
+    } else {
+        vm_load_until_nul(argv)?
+            .into_iter()
+            .map(vm_load_string)
+            .collect::<Result<Vec<_>, _>>()?
+    };
 
-    let args = vm_load_until_nul(argv)?
-        .into_iter()
-        .map(vm_load_string)
-        .collect::<Result<Vec<_>, _>>()?;
-
-    let envs = vm_load_until_nul(envp)?
-        .into_iter()
-        .map(vm_load_string)
-        .collect::<Result<Vec<_>, _>>()?;
+    let envs = if envp.is_null() {
+        Vec::new()
+    } else {
+        vm_load_until_nul(envp)?
+            .into_iter()
+            .map(vm_load_string)
+            .collect::<Result<Vec<_>, _>>()?
+    };
 
     debug!("sys_execve <= path: {path:?}, args: {args:?}, envs: {envs:?}");
 
@@ -228,8 +235,17 @@ pub fn sys_execve(
         proc_data.proc.rename_thread(my_tid, tgid);
     }
 
-    uctx.set_ip(entry_point.as_usize());
-    uctx.set_sp(user_stack_base.as_usize());
+    // Reset every user-visible register to a fresh-process state, not
+    // just IP/SP. Linux's `start_thread()` clears all GP registers,
+    // resets the TLS pointer, and clobbers any FP/SIMD state to the
+    // ABI default; leaving the syscall trapframe partially populated
+    // would let the new image observe leftover argv/envp pointers,
+    // a stale TLS base set by the pre-exec image, etc. Building a new
+    // `UserContext` matches what `entry::run_user_app` does for the
+    // init process — the only state the new image legitimately
+    // inherits is the address space and the kernel/scheduler bits we
+    // explicitly preserved above.
+    *uctx = UserContext::new(entry_point.as_usize(), user_stack_base, 0);
 
     // Unblock a vfork parent waiting for this child to exec.
     // Must be last: by now CLOEXEC fds are closed so the parent's pipe
