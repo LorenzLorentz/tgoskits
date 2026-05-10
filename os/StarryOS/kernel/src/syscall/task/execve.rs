@@ -13,7 +13,7 @@ use crate::{
     config::USER_HEAP_BASE,
     file::FD_TABLE,
     mm::{copy_from_kernel, load_user_app, new_user_aspace_empty, vm_load_string},
-    task::{AsThread, zap_thread},
+    task::{AsThread, rebind_task_tid, zap_thread},
 };
 
 pub fn sys_execve(
@@ -28,43 +28,30 @@ pub fn sys_execve(
     // ----------------------------------------------------------------
     let path = vm_load_string(path)?;
 
-    let args = if argv.is_null() {
-        // Handle NULL argv (treat as empty array)
-        Vec::new()
-    } else {
-        vm_load_until_nul(argv)?
-            .into_iter()
-            .map(vm_load_string)
-            .collect::<Result<Vec<_>, _>>()?
-    };
+    // Linux rejects NULL `argv`/`envp` with EFAULT — they are required
+    // user pointers, not optional, and the kernel does not silently
+    // substitute an empty list. (See `__do_execve_file` -> `bprm_init`.)
+    if argv.is_null() || envp.is_null() {
+        return Err(AxError::BadAddress);
+    }
 
-    let envs = if envp.is_null() {
-        // Handle NULL envp (treat as empty array)
-        Vec::new()
-    } else {
-        vm_load_until_nul(envp)?
-            .into_iter()
-            .map(vm_load_string)
-            .collect::<Result<Vec<_>, _>>()?
-    };
+    let args = vm_load_until_nul(argv)?
+        .into_iter()
+        .map(vm_load_string)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let envs = vm_load_until_nul(envp)?
+        .into_iter()
+        .map(vm_load_string)
+        .collect::<Result<Vec<_>, _>>()?;
 
     debug!("sys_execve <= path: {path:?}, args: {args:?}, envs: {envs:?}");
 
     let curr = current();
-    let proc_data = &curr.as_thread().proc_data;
-    let my_tid = curr.id().as_u64() as Pid;
-
-    // Linux semantics: a non-leader execve must transfer the leader
-    // identity (PID/TGID/PGID/SID) to the calling thread via de_thread's
-    // `exchange_tids`/`transfer_pid` dance, and zap the original leader.
-    // Implementing that requires mutable TIDs in `ax_task::TaskInner` and
-    // a rewrite of all four PID tables, so for now we surface EPERM and
-    // leave a note. Single-threaded callers and the common multi-threaded
-    // case (leader calls exec) work as intended.
-    // TODO: implement de_thread leader transfer for non-leader execve.
-    if my_tid != proc_data.proc.pid() {
-        return Err(AxError::OperationNotPermitted);
-    }
+    let thr = curr.as_thread();
+    let proc_data = &thr.proc_data;
+    let my_tid = thr.tid();
+    let tgid = proc_data.proc.pid();
 
     // Serialize concurrent execve from sibling threads. The loser of the
     // race returns EINTR and is about to be zapped by the winner anyway.
@@ -182,11 +169,30 @@ pub fn sys_execve(
 
     proc_data.set_heap_top(USER_HEAP_BASE);
 
-    proc_data.signal.reset_actions();
+    // Reset signal state for the new image, per POSIX/Linux semantics:
+    //
+    //   - Custom user handlers go back to SIG_DFL with cleared flags/mask.
+    //   - SIG_IGN (explicit or default-ignore for signals like SIGCHLD)
+    //     is preserved across exec — POSIX requires it so a parent that
+    //     did `signal(SIGCHLD, SIG_IGN)` keeps auto-reaping.
+    //   - Pending signals at both process and thread level are dropped:
+    //     they targeted the old image and shouldn't survive into the new
+    //     one. The blocked-signals mask itself is preserved.
+    //   - The alternate signal stack registered via `sigaltstack` is
+    //     reset, since its `ss_sp` pointed into the old aspace which is
+    //     no longer mapped.
+    proc_data.signal.reset_actions_for_exec();
+    proc_data.signal.clear_pending();
+    thr.signal.clear_pending();
+    thr.signal.reset_stack();
     proc_data.posix_timers.clear();
 
-    // Clear set_child_tid after exec since the original address is no longer valid
-    curr.as_thread().set_clear_child_tid(0);
+    // Pointers cached in the thread that referenced user memory in the
+    // OLD aspace are now dangling. Clear them so subsequent syscalls and
+    // the thread-exit path don't dereference freed user pages.
+    thr.set_clear_child_tid(0);
+    thr.set_robust_list_head(0);
+    thr.set_rseq_area(0);
 
     // Close CLOEXEC file descriptors.
     let mut fd_table = FD_TABLE.write();
@@ -194,6 +200,33 @@ pub fn sys_execve(
         fd_table.remove(fd);
     }
     drop(fd_table);
+
+    // de_thread leader transfer (non-leader caller only).
+    //
+    // After the sibling-teardown loop above, the only remaining task in
+    // this thread group is `curr`. If `curr` is not the original leader,
+    // Linux's `de_thread()` transfers the leader's TID/TGID identity to
+    // the calling thread via `exchange_tids` / `transfer_pid` so that
+    // `gettid() == getpid()` holds in the new image, and the parent's
+    // existing handle on the (still-original) PID continues to refer to
+    // this thread for `wait`, `kill`, `tgkill`, `/proc/<pid>` etc.
+    //
+    // We mirror that here by:
+    //   - renaming our `Thread::tid` from the old non-leader value to
+    //     the leader's TGID,
+    //   - re-keying the global TASK_TABLE entry,
+    //   - re-keying the process-level signal child list,
+    //   - replacing our entry in `proc.tg.threads`.
+    //
+    // The original leader was zapped above (it's a sibling from `curr`'s
+    // viewpoint), did its `do_exit(0, false)`, and is no longer in the
+    // task table or thread group, so the destination TID is free.
+    if my_tid != tgid {
+        thr.set_tid(tgid);
+        rebind_task_tid(&curr, my_tid, tgid);
+        proc_data.signal.rename_child(my_tid, tgid);
+        proc_data.proc.rename_thread(my_tid, tgid);
+    }
 
     uctx.set_ip(entry_point.as_usize());
     uctx.set_sp(user_stack_base.as_usize());

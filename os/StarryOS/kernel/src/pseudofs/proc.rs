@@ -139,7 +139,7 @@ fn task_status(task: &AxTaskRef) -> String {
     let cred = thread.cred();
     render_task_status(
         thread.proc_data.proc.pid(),
-        task.id().as_u64(),
+        thread.tid() as u64,
         &cred,
         task.cpumask(),
         ax_hal::cpu_num(),
@@ -496,7 +496,12 @@ impl SimpleDirOps for ProcFsHandler {
         Box::new(
             tasks()
                 .into_iter()
-                .map(|task| task.id().as_u64().to_string().into())
+                .filter_map(|task| {
+                    // Use the user-visible TID; an `execve` de_thread can
+                    // make it differ from the scheduler ID. Skip kernel
+                    // tasks which have no `Thread` extension.
+                    task.try_as_thread().map(|t| t.tid().to_string().into())
+                })
                 .chain([Cow::Borrowed("self")]),
         )
     }

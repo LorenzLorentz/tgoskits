@@ -78,6 +78,18 @@ impl NextSignalCheckBlock {
 
 /// The inner data of a thread.
 pub struct Thread {
+    /// User-visible thread ID (the `Pid` returned by `gettid`).
+    ///
+    /// Initially equal to the underlying scheduler `TaskInner::id()`. The two
+    /// diverge after a successful non-leader `execve`: Linux's `de_thread`
+    /// step transfers the leader's TID/TGID to the calling thread so that
+    /// `gettid() == getpid()` holds in the new image. We model that by
+    /// updating this field while leaving the immutable scheduler ID alone.
+    /// All user-facing TID lookups (`sys_gettid`, `set_tid_address`, signal
+    /// child registration, `do_exit`'s thread-group bookkeeping, etc.) read
+    /// this rather than the scheduler ID.
+    tid: AtomicU32,
+
     /// The process data shared by all threads in the process.
     pub proc_data: Arc<ProcessData>,
 
@@ -140,6 +152,7 @@ impl Thread {
     pub fn new(tid: u32, proc_data: Arc<ProcessData>, parent_cred: Option<Arc<Cred>>) -> Box<Self> {
         let cred = parent_cred.unwrap_or_else(|| Arc::new(Cred::root()));
         Box::new(Thread {
+            tid: AtomicU32::new(tid),
             signal: ThreadSignalManager::new(tid, proc_data.signal.clone()),
             proc_data,
             clear_child_tid: AtomicUsize::new(0),
@@ -155,6 +168,20 @@ impl Thread {
             pdeathsig: AtomicU32::new(0),
             cred: SpinNoIrq::new(cred),
         })
+    }
+
+    /// Returns the user-visible TID for this thread.
+    ///
+    /// See the field doc on [`Thread::tid`] for why this can differ from
+    /// the underlying scheduler `TaskInner::id()`.
+    pub fn tid(&self) -> u32 {
+        self.tid.load(Ordering::Acquire)
+    }
+
+    /// Updates the user-visible TID. Called only by `execve`'s de_thread
+    /// step to transfer the leader's TID to a non-leader caller.
+    pub(crate) fn set_tid(&self, tid: u32) {
+        self.tid.store(tid, Ordering::Release);
     }
 
     /// Get the clear child tid field.

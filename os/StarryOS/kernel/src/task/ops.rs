@@ -245,7 +245,10 @@ pub fn do_exit(exit_code: i32, group_exit: bool) {
     }
 
     let process = &thr.proc_data.proc;
-    if process.exit_thread(curr.id().as_u64() as Pid, exit_code) {
+    // Use the user-visible TID (`thr.tid()`), not the scheduler ID. After
+    // a non-leader `execve`'s de_thread the two differ, and the thread
+    // group is keyed by the user-visible TID.
+    if process.exit_thread(thr.tid(), exit_code) {
         // Close all file descriptors before marking the process as exited.
         // This ensures pipe write ends and other resources are properly released,
         // so parent processes blocking on pipe reads will receive EOF.
@@ -297,6 +300,25 @@ pub fn do_exit(exit_code: i32, group_exit: bool) {
         }
     }
     thr.set_exit();
+}
+
+/// Rebinds a task's user-visible TID in [`TASK_TABLE`] from `old_tid` to
+/// `new_tid`.
+///
+/// Used by `execve`'s de_thread step: when a non-leader thread successfully
+/// `execve`s, it inherits the leader's TID/TGID so that `gettid() == getpid()`
+/// holds in the new image. This re-keys the global task lookup table so
+/// signal/wait targeting the leader TID resolves to the renamed thread.
+///
+/// Caller is responsible for ensuring no other task currently occupies
+/// `new_tid` (the original leader must already have been zapped and
+/// removed from the table). The two updates are not atomic with respect
+/// to each other; a brief window exists where both keys point at the same
+/// task, which is harmless because both lookups resolve to the same task.
+pub fn rebind_task_tid(task: &AxTaskRef, old_tid: Pid, new_tid: Pid) {
+    let mut table = TASK_TABLE.write();
+    table.insert(new_tid, task);
+    table.remove(&old_tid);
 }
 
 /// Request a sibling thread to exit with thread-only semantics.
