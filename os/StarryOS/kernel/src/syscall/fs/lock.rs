@@ -423,8 +423,8 @@ pub fn fcntl_setlk(fd: c_int, arg: usize, ofd: bool, wait: bool) -> AxResult<isi
                     };
                     entries.retain(|e| !e.owner.is_dead());
                     let owner = make_owner(ofd, &file);
-                    let still_blocked = find_conflict(entries, &owner, start, end, kind.unwrap())
-                        .is_some();
+                    let still_blocked =
+                        find_conflict(entries, &owner, start, end, kind.unwrap()).is_some();
                     if entries.is_empty() {
                         table.remove(&key);
                     }
