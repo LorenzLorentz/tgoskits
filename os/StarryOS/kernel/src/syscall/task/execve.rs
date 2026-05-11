@@ -176,21 +176,21 @@ pub fn sys_execve(
 
     proc_data.set_heap_top(USER_HEAP_BASE);
 
-    // Reset signal state for the new image, per POSIX/Linux semantics:
+    // Reset signal state for the new image, per POSIX/Linux semantics
+    // (see `flush_signal_handlers` + `do_execveat_common` in Linux):
     //
     //   - Custom user handlers go back to SIG_DFL with cleared flags/mask.
-    //   - SIG_IGN (explicit or default-ignore for signals like SIGCHLD)
-    //     is preserved across exec — POSIX requires it so a parent that
-    //     did `signal(SIGCHLD, SIG_IGN)` keeps auto-reaping.
-    //   - Pending signals at both process and thread level are dropped:
-    //     they targeted the old image and shouldn't survive into the new
-    //     one. The blocked-signals mask itself is preserved.
+    //   - Explicit `SIG_IGN` is preserved across exec (POSIX); default
+    //     dispositions stay `SIG_DFL` even when the signal's default
+    //     action is Ignore.
+    //   - Pending signals at both process and thread level are *kept*:
+    //     POSIX requires that signals already queued (including blocked
+    //     ones) survive `execve` and be delivered against the new image's
+    //     handlers. The blocked-signals mask itself is also preserved.
     //   - The alternate signal stack registered via `sigaltstack` is
     //     reset, since its `ss_sp` pointed into the old aspace which is
     //     no longer mapped.
     proc_data.signal.reset_actions_for_exec();
-    proc_data.signal.clear_pending();
-    thr.signal.clear_pending();
     thr.signal.reset_stack();
     proc_data.posix_timers.clear();
 

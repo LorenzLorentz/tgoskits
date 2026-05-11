@@ -121,12 +121,16 @@ impl ProcessSignalManager {
 
     /// Resets actions across `execve` per POSIX/Linux semantics.
     ///
-    /// Custom user handlers are reset to `SIG_DFL`, and the action's flags,
-    /// mask and restorer are cleared. `SIG_IGN` (whether explicit or via the
-    /// signal's default ignore disposition like `SIGCHLD`) is preserved
-    /// across the exec, because POSIX requires it: a parent that did
-    /// `signal(SIGCHLD, SIG_IGN)` to auto-reap zombies must keep that
-    /// behavior in the new image.
+    /// - Disposition `Handler(_)` → `SIG_DFL` (custom handlers point into
+    ///   the old image and must not run in the new one).
+    /// - Disposition `Ignore` (explicit `SIG_IGN`) is preserved, with
+    ///   flags/mask/restorer cleared — POSIX requires that a parent which
+    ///   set `signal(SIGCHLD, SIG_IGN)` keeps that behavior after exec.
+    /// - Disposition `Default` is left as `SIG_DFL`; we deliberately do
+    ///   *not* upgrade it to explicit `Ignore` even when the signal's
+    ///   default action happens to be Ignore (e.g. `SIGCHLD`, `SIGURG`,
+    ///   `SIGWINCH`), so a post-exec `sigaction` query observes the
+    ///   real disposition the kernel installed.
     pub fn reset_actions_for_exec(&self) {
         let mut actions = self.actions.lock();
         for signo_idx in 0..64u8 {
@@ -134,9 +138,7 @@ impl ProcessSignalManager {
                 continue;
             };
             let action = &mut actions[signo];
-            if action.is_ignore(signo) {
-                // Replace with an explicit SIG_IGN that no longer carries
-                // any flags/mask/restorer from the pre-exec installation.
+            if matches!(action.disposition, crate::SignalDisposition::Ignore) {
                 *action = SignalAction {
                     disposition: crate::SignalDisposition::Ignore,
                     ..Default::default()
@@ -145,15 +147,6 @@ impl ProcessSignalManager {
                 *action = SignalAction::default();
             }
         }
-    }
-
-    /// Drops every queued process-level pending signal. Called by `execve`
-    /// so the new image starts with an empty process-wide signal queue —
-    /// pending signals targeting the old image are no longer meaningful.
-    pub fn clear_pending(&self) {
-        let mut pending = self.pending.lock();
-        *pending = PendingSignals::default();
-        self.possibly_has_signal.store(false, Ordering::Release);
     }
 
     /// Updates a thread's TID in the children registration. Called by
