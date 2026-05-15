@@ -1,7 +1,7 @@
 //! User task management.
 
 mod cred;
-mod futex;
+pub mod futex;
 mod ops;
 pub mod posix_timer;
 mod resources;
@@ -428,6 +428,9 @@ pub struct ProcessData {
     /// The default mask for file permissions.
     umask: AtomicU32,
 
+    /// The process nice value used by getpriority/setpriority compatibility.
+    nice: AtomicI32,
+
     /// Accumulated CPU time of waited children (utime + stime).
     /// Updated when wait() reaps a child.
     children_cpu_time: SpinNoIrq<(TimeValue, TimeValue)>,
@@ -472,6 +475,7 @@ impl ProcessData {
             vfork_done: SpinNoIrq::new(None),
 
             umask: AtomicU32::new(0o022),
+            nice: AtomicI32::new(0),
 
             children_cpu_time: SpinNoIrq::new((TimeValue::ZERO, TimeValue::ZERO)),
 
@@ -508,6 +512,16 @@ impl ProcessData {
     /// Set the umask and return the old value.
     pub fn replace_umask(&self, umask: u32) -> u32 {
         self.umask.swap(umask, Ordering::SeqCst)
+    }
+
+    /// Get the process nice value.
+    pub fn nice(&self) -> i32 {
+        self.nice.load(Ordering::SeqCst)
+    }
+
+    /// Set the process nice value.
+    pub fn set_nice(&self, nice: i32) {
+        self.nice.store(nice, Ordering::SeqCst);
     }
 
     /// Get the accumulated CPU time of waited children.
