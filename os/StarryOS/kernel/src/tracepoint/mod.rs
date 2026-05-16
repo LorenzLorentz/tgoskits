@@ -3,7 +3,7 @@ mod control;
 mod trace;
 mod trace_pipe;
 
-use alloc::{collections::BTreeMap, string::ToString, sync::Arc};
+use alloc::{collections::BTreeMap, string::ToString, sync::Arc, vec::Vec};
 use core::{num::NonZero, ops::Deref};
 
 use ax_errno::{AxError, AxResult};
@@ -83,11 +83,90 @@ impl KernelTraceOps for KernelTraceAux {
     }
 }
 
-fn common_trace_pipe_read(trace_buf: &mut dyn TracePipeOps, buf: &mut [u8]) -> usize {
+/// Carries the unread suffix of a formatted text record across `read_at` calls.
+///
+/// Tracefs text records are consumed as whole records from the backing trace
+/// buffer, but the user-provided read buffer may be smaller than one formatted
+/// line. This helper lets callers return the prefix immediately and keep the
+/// suffix for later reads, avoiding a false EOF when `buf` is too small.
+struct TextDrain {
+    pending: Vec<u8>,
+    pos: usize,
+}
+
+impl TextDrain {
+    /// Creates an empty text drain with no pending bytes.
+    const fn new() -> Self {
+        Self {
+            pending: Vec::new(),
+            pos: 0,
+        }
+    }
+
+    /// Discards any pending bytes and returns the drain to the initial state.
+    fn reset(&mut self) {
+        self.pending.clear();
+        self.pos = 0;
+    }
+
+    /// Copies as many pending bytes as possible into `buf`.
+    ///
+    /// Returns the number of bytes copied. If all pending bytes are drained,
+    /// the internal state is reset so the next read can consume a new record.
+    fn drain_pending(&mut self, buf: &mut [u8]) -> usize {
+        if self.pending.is_empty() {
+            return 0;
+        }
+
+        let remaining = &self.pending[self.pos..];
+        let len = remaining.len().min(buf.len());
+        buf[..len].copy_from_slice(&remaining[..len]);
+        self.pos += len;
+
+        if self.pos == self.pending.len() {
+            self.reset();
+        }
+        len
+    }
+
+    /// Copies one formatted record into `buf` starting at `copy_len`.
+    ///
+    /// Returns `false` when `buf` has no remaining space and the caller should
+    /// stop without consuming a new backing record. If only a prefix fits, the
+    /// remaining suffix is stored internally and the method returns `true`, so
+    /// the caller may consume the backing record.
+    fn copy_record(&mut self, record: &[u8], buf: &mut [u8], copy_len: &mut usize) -> bool {
+        if record.is_empty() {
+            return true;
+        }
+
+        let remaining = buf.len() - *copy_len;
+        if remaining == 0 {
+            return false;
+        }
+
+        let len = record.len().min(remaining);
+        buf[*copy_len..*copy_len + len].copy_from_slice(&record[..len]);
+        *copy_len += len;
+
+        if len < record.len() {
+            self.pending.extend_from_slice(&record[len..]);
+        }
+        true
+    }
+}
+
+fn common_trace_pipe_read(
+    trace_buf: &mut dyn TracePipeOps,
+    drain: &mut TextDrain,
+    buf: &mut [u8],
+) -> usize {
+    let mut copy_len = drain.drain_pending(buf);
+    if copy_len == buf.len() {
+        return copy_len;
+    }
+
     let trace_cmdline_cache = TRACE_CMDLINE_CACHE.lock();
-    // read real trace data
-    let mut copy_len = 0;
-    let mut peek_flag = false;
     loop {
         if let Some(record) = trace_buf.peek() {
             let record_str = TraceEntryParser::parse::<KernelTraceAux>(
@@ -95,20 +174,17 @@ fn common_trace_pipe_read(trace_buf: &mut dyn TracePipeOps, buf: &mut [u8]) -> u
                 &trace_cmdline_cache,
                 record,
             );
-            if copy_len + record_str.len() > buf.len() {
+            if !drain.copy_record(record_str.as_bytes(), buf, &mut copy_len) {
                 break;
             }
-            let len = record_str.len();
-            buf[copy_len..copy_len + len].copy_from_slice(record_str.as_bytes());
-            copy_len += len;
-            peek_flag = true;
-        }
-        if peek_flag {
             trace_buf.pop(); // Remove the record after reading
-            peek_flag = false;
-        } else {
-            break;
+
+            if copy_len == buf.len() {
+                break;
+            }
+            continue;
         }
+        break;
     }
     copy_len
 }
@@ -219,7 +295,7 @@ pub fn init_tracing_dir(fs: Arc<SimpleFs>) -> DirMaker {
         "trace_pipe",
         SpecialFsFile::new_regular_with_perm(
             fs.clone(),
-            trace_pipe::TracePipeFile,
+            trace_pipe::TracePipeFile::new(),
             NodePermission::from_bits_truncate(0o440),
         ),
     );

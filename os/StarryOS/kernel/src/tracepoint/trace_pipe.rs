@@ -1,5 +1,6 @@
 use core::{future::poll_fn, task::Poll};
 
+use ax_sync::Mutex;
 use ax_task::{
     current,
     future::{block_on, interruptible},
@@ -10,9 +11,14 @@ use ktracepoint::TracePipeOps;
 use crate::{pseudofs::DirectRwFsFileOps, task::AsThread, tracepoint::TRACE_RAW_PIPE};
 
 /// File representing the trace pipe.
-pub struct TracePipeFile;
+pub struct TracePipeFile(Mutex<super::TextDrain>);
 
 impl TracePipeFile {
+    /// Creates a new `TracePipeFile` instance.
+    pub const fn new() -> Self {
+        Self(Mutex::new(super::TextDrain::new()))
+    }
+
     fn readable(&self) -> bool {
         let trace_raw_pipe = TRACE_RAW_PIPE.lock();
         !trace_raw_pipe.is_empty()
@@ -21,17 +27,23 @@ impl TracePipeFile {
 
 impl DirectRwFsFileOps for TracePipeFile {
     fn read_at(&self, buf: &mut [u8], _offset: u64) -> VfsResult<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
+
         let curr = current();
         let proc_data = &curr.as_thread().proc_data;
 
         let read_len = loop {
-            let mut trace_raw_pipe = TRACE_RAW_PIPE.lock();
-            let read_len = super::common_trace_pipe_read(&mut *trace_raw_pipe, buf);
-            if read_len != 0 {
-                break read_len;
+            {
+                let mut drain = self.0.lock();
+                let mut trace_raw_pipe = TRACE_RAW_PIPE.lock();
+                let read_len = super::common_trace_pipe_read(&mut *trace_raw_pipe, &mut drain, buf);
+                if read_len != 0 {
+                    break read_len;
+                }
             }
-            // Release the lock before waiting
-            drop(trace_raw_pipe);
+
             // wait for new data
             let _result = block_on(interruptible(poll_fn(|cx| {
                 if self.readable() {
