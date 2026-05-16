@@ -1,5 +1,6 @@
 //! Basic virtual filesystem support
 
+pub mod debug;
 pub mod dev;
 mod device;
 mod dir;
@@ -94,6 +95,8 @@ pub fn mount_all() -> LinuxResult<()> {
     mount_at(&fs, "/sys", usbfs::new_sysfs())?;
     #[cfg(not(feature = "plat-dyn"))]
     mount_at(&fs, "/sys", sysfs::new_sysfs())?;
+
+    mount_at(&fs, "/sys/kernel/debug", debug::new_debugfs())?;
 
     drop(fs);
 
