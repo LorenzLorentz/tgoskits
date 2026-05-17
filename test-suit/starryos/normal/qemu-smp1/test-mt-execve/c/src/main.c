@@ -55,17 +55,36 @@
  *          (vfork child loops forever, a second thread does a good execve)
  *          and gate the phase on the new image's clean exit; a deadlock
  *          surfaces as a runner-timeout (no LEADER_CHILD_OK).
- * Phase 7: a successful execve from the leader of a multi-threaded
+ * Phase 7 (robust-list owner-death after non-leader exec): when a
+ *          non-leader thread of a multi-threaded process successfully
+ *          execs, `Thread::tid()` is rebound to the leader's TGID so
+ *          that `gettid() == getpid()` holds in the new image. The
+ *          exit-time robust-futex walk (`handle_futex_death`) must
+ *          compare the futex owner field against the *user-visible*
+ *          TID (`Thread::tid()`), not the scheduler task id, otherwise
+ *          a userspace robust mutex whose owner was written via
+ *          `gettid()` in the post-exec image will never have its
+ *          `FUTEX_OWNER_DIED` bit set on owner death, leaving every
+ *          waiter parked forever. We run this in a forked child: a
+ *          non-leader thread execs into `robust-list-child`; the new
+ *          image installs a single-entry robust list whose futex word
+ *          holds its own `gettid()`, spawns a waiter parked in
+ *          `FUTEX_WAIT` on that word, and the main thread issues a
+ *          raw `SYS_exit` (single-thread exit, not group_exit) so the
+ *          robust-list walk fires. The waiter must observe
+ *          `FUTEX_OWNER_DIED` set in the futex word.
+ * Phase 8: a successful execve from the leader of a multi-threaded
  *          process must tear down the sibling threads and run the new
  *          image; the new image must observe gettid() == getpid(), and
  *          prints the final success marker LEADER_CHILD_OK. The runner's
  *          single-success regex matches only that marker — every earlier
- *          phase must pass for control to reach Phase 7.
+ *          phase must pass for control to reach Phase 8.
  */
 
 #include "test_framework.h"
 
 #include <fcntl.h>
+#include <linux/futex.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdint.h>
@@ -236,6 +255,133 @@ static int run_cloexec_check_child(void)
     return 0;
 }
 
+/* Phase 7 (robust-list owner-death wake after non-leader exec).
+ *
+ * Layout matches the Linux `robust_list_head` / `robust_list` ABI: 24
+ * bytes for the head (pointer, long, pointer), 8 bytes for each list
+ * entry's `next` pointer. The kernel computes the futex word address
+ * as `entry + futex_offset`, where `futex_offset` is in bytes from the
+ * `next` field of the list entry.
+ *
+ * We use a static single-entry list. `g_robust_node.next` points back
+ * to `&g_robust_head.list_first` (the kernel's `end_ptr` sentinel) so
+ * the walk terminates after one entry. */
+/* `<linux/futex.h>` provides these but we redefine defensively in case
+ * the cross-toolchain ships a stripped header. */
+#ifndef FUTEX_OWNER_DIED
+#define FUTEX_OWNER_DIED 0x40000000u
+#endif
+#ifndef FUTEX_TID_MASK
+#define FUTEX_TID_MASK 0x3fffffffu
+#endif
+
+struct robust_node {
+    void    *next;
+    uint32_t owner;
+    uint32_t _pad;
+};
+
+struct robust_head {
+    void *list_first;
+    long  futex_offset;
+    void *list_op_pending;
+};
+
+static struct robust_node g_robust_node;
+static struct robust_head g_robust_head;
+
+/* Waiter thread for the robust-list phase. Parks in FUTEX_WAIT on the
+ * futex word; when the post-exec main thread exits, the kernel's robust
+ * list walk must wake us and the word must have FUTEX_OWNER_DIED set.
+ *
+ * The fast-path `*uaddr != expected` short-circuit in FUTEX_WAIT means
+ * that even if main exited before we parked we still observe the
+ * OWNER_DIED bit on the post-wake read — both paths converge on the
+ * same final assertion. A bounded 3s timeout converts a regression
+ * (main exits without setting OWNER_DIED → wait never satisfied) into
+ * an explicit FAIL line instead of a runner-level hang. */
+static void *robust_waiter_thread(void *arg)
+{
+    uint32_t expected = (uint32_t)(uintptr_t)arg;
+    struct timespec ft = { 3, 0 };
+    long r = syscall(SYS_futex, &g_robust_node.owner, FUTEX_WAIT, expected,
+                     &ft, NULL, 0);
+    int saved_errno = errno;
+    uint32_t val = g_robust_node.owner;
+    if (!(val & FUTEX_OWNER_DIED)) {
+        fprintf(stderr,
+                "FAIL: FUTEX_OWNER_DIED bit not set after non-leader-exec "
+                "main exit (val=%#x r=%ld errno=%d)\n",
+                val, r, saved_errno);
+        _exit(31);
+    }
+    _exit(0);
+}
+
+/* Re-entry body for Phase 7. We're already past the non-leader exec
+ * (Phase 7's exec thread is what brought us here), so gettid() ==
+ * getpid() must already hold; we re-assert it cheaply before doing
+ * the robust-list work to keep the failure surface narrow. */
+static int run_robust_list_child(void)
+{
+    pid_t tid = my_gettid();
+    pid_t pid = getpid();
+    if (tid != pid) {
+        fprintf(stderr,
+                "FAIL: post-exec gettid(%d) != getpid(%d) before robust-list test\n",
+                (int)tid, (int)pid);
+        return 41;
+    }
+
+    g_robust_node.next = &g_robust_head; /* end sentinel = &head.list_first */
+    g_robust_node.owner = (uint32_t)tid & FUTEX_TID_MASK;
+    g_robust_head.list_first = &g_robust_node;
+    g_robust_head.futex_offset =
+        (long)((char *)&g_robust_node.owner - (char *)&g_robust_node);
+    g_robust_head.list_op_pending = NULL;
+
+    if (syscall(SYS_set_robust_list, &g_robust_head,
+                sizeof(g_robust_head)) != 0) {
+        fprintf(stderr, "FAIL: set_robust_list: %s\n", strerror(errno));
+        return 42;
+    }
+
+    pthread_t waiter;
+    uintptr_t expected = (uintptr_t)((uint32_t)tid & FUTEX_TID_MASK);
+    if (pthread_create(&waiter, NULL, robust_waiter_thread,
+                       (void *)expected) != 0) {
+        fprintf(stderr, "FAIL: spawn robust-list waiter thread\n");
+        return 43;
+    }
+
+    /* Give the waiter time to enter FUTEX_WAIT. The OWNER_DIED bit gets
+     * set regardless of ordering — see the comment in
+     * `robust_waiter_thread` — but parking first exercises the actual
+     * wake path that the reviewer asked for. */
+    struct timespec ts = { 0, 50000000 }; /* 50ms */
+    nanosleep(&ts, NULL);
+
+    /* Raw SYS_exit: terminate this thread only (do_exit(_, false)),
+     * not group_exit. Going through libc's exit() / _exit() would call
+     * SYS_exit_group and kill the waiter before robust-list cleanup
+     * could observe it. We also avoid musl's pthread_exit because some
+     * libcs touch set_robust_list during thread teardown. */
+    syscall(SYS_exit, 0);
+    return 44; /* unreachable */
+}
+
+/* Non-leader thread used by the robust-list phase. Same shape as
+ * `nonleader_exec_thread` / `nonleader_pending_sig_exec_thread` but
+ * dispatches to the robust-list re-entry sentinel. */
+static void *nonleader_robust_list_exec_thread(void *arg)
+{
+    char *self = (char *)arg;
+    char *av[] = { self, (char *)"robust-list-child", NULL };
+    char *ev[] = { NULL };
+    execve(self, av, ev);
+    return NULL;
+}
+
 /* Phase 6 (vfork-blocked sibling vs execve). The sibling thread calls
  * vfork(); the vfork child loops in pause() so the parent thread stays
  * blocked in `wait_vfork_done`. With the fix that wait is killable —
@@ -374,6 +520,13 @@ int main(int argc, char *argv[])
     /* Re-entry from the CLOEXEC-race phase inside its fork child. */
     if (argc >= 2 && strcmp(argv[1], "cloexec-check-child") == 0) {
         return run_cloexec_check_child();
+    }
+    /* Re-entry from the robust-list owner-death phase inside its fork
+     * child. The new image installs a robust list and a waiter, then
+     * exits its main thread; passes iff the waiter observes
+     * FUTEX_OWNER_DIED. */
+    if (argc >= 2 && strcmp(argv[1], "robust-list-child") == 0) {
+        return run_robust_list_child();
     }
     /* Re-entry from the final leader-exec phase. */
     if (argc >= 2 && strcmp(argv[1], "leader-child") == 0) {
@@ -736,7 +889,62 @@ int main(int argc, char *argv[])
 
     printf("PHASE6_OK\n");
 
-    /* Phase 7: successful execve from the leader of a multi-threaded
+    /* Phase 7: robust-list owner-death wake after non-leader execve.
+     *
+     * Regression test for `handle_futex_death` using `Thread::tid()`
+     * (= user-visible TID, what `gettid()` returns) instead of the
+     * scheduler task id. Pre-fix: after a non-leader exec the two
+     * diverged, the owner-field comparison silently mismatched, the
+     * `FUTEX_OWNER_DIED` bit was never set, and robust-mutex waiters
+     * stayed parked forever. We drive that exact scenario in a fork
+     * child: a non-leader thread execs into `robust-list-child`, the
+     * new image installs a robust list and a waiter, then raw-SYS_exits
+     * its main thread; the waiter must observe `FUTEX_OWNER_DIED` in
+     * the futex word (it has a 3s timeout that converts a regression
+     * into an explicit FAIL line instead of a runner-level hang). */
+    pid_t rlpid = fork();
+    CHECK(rlpid != -1, "fork for robust-list owner-death test");
+    if (rlpid == 0) {
+        pthread_t bt1, bt2, et;
+        if (pthread_create(&bt1, NULL, sibling_block, NULL) != 0
+            || pthread_create(&bt2, NULL, sibling_block, NULL) != 0) {
+            fprintf(stderr,
+                    "FAIL: spawn blocking siblings (robust-list)\n");
+            _exit(2);
+        }
+        wait_for_siblings(2);
+        sibling_ready = 0;
+
+        if (pthread_create(&et, NULL, nonleader_robust_list_exec_thread,
+                           argv[0]) != 0) {
+            fprintf(stderr, "FAIL: spawn robust-list exec thread\n");
+            _exit(2);
+        }
+        for (int i = 0; i < 5000; i++) {
+            struct timespec ts = { 0, 1000000 };
+            nanosleep(&ts, NULL);
+        }
+        fprintf(stderr,
+                "FAIL: robust-list child leader survived non-leader exec\n");
+        _exit(3);
+    }
+
+    int rlstatus = 0;
+    pid_t rlwaited = waitpid(rlpid, &rlstatus, 0);
+    CHECK(rlwaited == rlpid, "waitpid returned the robust-list child");
+    CHECK(WIFEXITED(rlstatus),
+          "robust-list child exited normally (not via signal)");
+    CHECK(WIFEXITED(rlstatus) && WEXITSTATUS(rlstatus) == 0,
+          "robust-list child exited with status 0 "
+          "(waiter saw FUTEX_OWNER_DIED)");
+
+    if (__fail > 0) {
+        TEST_DONE();
+    }
+
+    printf("PHASE7_OK\n");
+
+    /* Phase 8: successful execve from the leader of a multi-threaded
      * process. Siblings block in pause() and are zapped during sibling
      * teardown; control then jumps into the new image. */
     sibling_ready = 0;

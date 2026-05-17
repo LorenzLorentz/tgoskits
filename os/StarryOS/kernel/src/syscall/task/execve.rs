@@ -235,17 +235,30 @@ pub fn sys_execve(
     thr.set_robust_list_head(0);
     thr.set_rseq_area(0);
 
-    // Close CLOEXEC file descriptors under the same write guard we took
+    // Remove CLOEXEC fds from the table under the write guard we took
     // for the post-teardown snapshot — no fd can be added or have its
-    // CLOEXEC bit flipped between scan and close. Match Linux POSIX
-    // "close-eats-locks" by releasing per-inode POSIX record locks held
-    // by this pid for each fd we drop here.
+    // CLOEXEC bit flipped between scan and close — but defer the actual
+    // `release_locks_on_close` (POSIX-lock release, OFD waker wakes,
+    // FileDescriptor drop) until after we've dropped the table write
+    // lock. The wakers fire on the global advisory-lock waiter queues
+    // and may immediately drive woken tasks back through `FD_TABLE`;
+    // running them under the write guard would risk lock re-entry and
+    // also expand the critical section across arbitrary destructor work.
+    // Linux's `do_close_on_exec` drops `files->file_lock` around each
+    // `filp_close` call for the same reason. We close the entire batch
+    // after the lock is released, which is equivalent: no new fd can
+    // appear in the slots we just emptied because nothing else in this
+    // process is running yet (siblings reaped, new image not started).
+    let mut closing = Vec::with_capacity(cloexec_fds.len());
     for fd in cloexec_fds {
         if let Some(f) = fd_table.remove(fd) {
-            crate::file::release_locks_on_close(f);
+            closing.push(f);
         }
     }
     drop(fd_table);
+    for f in closing {
+        crate::file::release_locks_on_close(f);
+    }
 
     // de_thread leader transfer (non-leader caller only).
     //

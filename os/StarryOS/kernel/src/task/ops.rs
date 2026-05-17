@@ -303,7 +303,15 @@ fn handle_futex_death(entry: *mut RobustList, offset: i64) -> AxResult<()> {
         .ok_or(AxError::InvalidInput)?;
     let address: usize = address.try_into().map_err(|_| AxError::InvalidInput)?;
     let futex_word = address as *mut u32;
-    let owner_tid = current().id().as_u64() as u32;
+    // Linux's `handle_futex_death` compares the futex owner field to
+    // `task_pid_vnr(curr)` — the user-visible TID. Userspace wrote this
+    // value via `gettid()` when it took the lock, so we must compare
+    // against the same value. After a non-leader `execve`'s de_thread the
+    // user-visible TID (`Thread::tid()`) diverges from the scheduler task
+    // id; using `current().id().as_u64()` here would silently skip every
+    // dead-owner entry for a process that exec'd from a non-leader,
+    // leaving robust-mutex waiters parked forever.
+    let owner_tid = current().as_thread().tid();
     let value = futex_word.vm_read()?;
 
     if value & FUTEX_TID_MASK != owner_tid {
