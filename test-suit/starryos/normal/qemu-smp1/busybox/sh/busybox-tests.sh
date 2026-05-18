@@ -884,6 +884,44 @@ _rc=$?; if [ "$_rc" -eq 0 ] && echo "$_t" | grep -q "[0-9]"; then echo "PASS: bl
 _t=$({ timeout 10 sh -c "busybox hwclock -r 2>&1"; } 2>&1)
 if echo "$_t" | grep -qF "hwclock"; then echo "PASS: busybox_hwclock"; PASS=$((PASS+1)); else echo "FAIL: busybox_hwclock"; echo "$_t"; FAIL=$((FAIL+1)); fi
 
+# busybox_crontab — install a crontab into a private spool dir (-c), list it
+# back, byte-match the marker, then remove and confirm removal.  This
+# exercises the real read/write/rename(2)/fchown/fchmod/unlink paths in
+# miscutils/crontab.c rather than just usage-banner.  The pass marker
+# cron_tab_ok is only emitted when every step in the round-trip succeeds,
+# so the test reverse-falsifies "crontab silently dropped the install",
+# "crontab -l can't reopen the installed file", and "crontab -r left the
+# file behind".
+_t=$(timeout 20 sh -c '
+    busybox rm -rf /tmp/bb_crontab_tabs /tmp/bb_crontab_in /tmp/bb_crontab_out
+    busybox mkdir -p /tmp/bb_crontab_tabs
+    busybox printf "*/5 * * * * /bin/true crontab_marker_aaa\n" > /tmp/bb_crontab_in
+    busybox crontab -c /tmp/bb_crontab_tabs /tmp/bb_crontab_in
+    _irc=$?
+    busybox crontab -c /tmp/bb_crontab_tabs -l > /tmp/bb_crontab_out 2>&1
+    _lrc=$?
+    if [ "$_irc" = 0 ] && [ "$_lrc" = 0 ] && busybox grep -qF "crontab_marker_aaa" /tmp/bb_crontab_out; then
+        busybox crontab -c /tmp/bb_crontab_tabs -r
+        _rrc=$?
+        _after=$(busybox crontab -c /tmp/bb_crontab_tabs -l 2>&1)
+        if [ "$_rrc" = 0 ] && ! echo "$_after" | busybox grep -qF "crontab_marker_aaa"; then
+            busybox echo cron_tab_ok
+        else
+            busybox echo "crontab_remove_failed rrc=$_rrc after=$_after"
+        fi
+    else
+        busybox echo "crontab_install_or_list_failed irc=$_irc lrc=$_lrc"
+        busybox cat /tmp/bb_crontab_out 2>&1
+        busybox ls -la /tmp/bb_crontab_tabs 2>&1
+    fi
+' 2>&1)
+if echo "$_t" | grep -qF "cron_tab_ok"; then
+    echo "PASS: busybox_crontab"; PASS=$((PASS+1))
+else
+    echo "FAIL: busybox_crontab"; echo "$_t"
+    FAIL=$((FAIL+1))
+fi
+
 echo "=== BusyBox Test Summary ==="
 echo "PASS: $PASS  FAIL: $FAIL  TOTAL: $((PASS+FAIL))"
 _m1="Test"; _m2="run"; _m3="completed"; echo "$_m1 $_m2 $_m3"

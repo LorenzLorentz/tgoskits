@@ -290,18 +290,12 @@ impl OpenOptions {
         if !self.read && !self.write && !self.append {
             return false;
         }
-        match (self.write, self.append) {
-            (true, false) => {}
-            (false, false) => {
-                if self.truncate {
-                    return false;
-                }
-            }
-            (_, true) => {
-                if self.truncate && !self.create_new {
-                    return false;
-                }
-            }
+        // O_TRUNC requires a writable mode.  O_APPEND alone is enough — Linux
+        // and POSIX both accept O_TRUNC|O_APPEND (truncate happens at open
+        // time, append affects subsequent writes; the two are orthogonal and
+        // busybox crontab, among others, relies on this combination).
+        if self.truncate && !self.write && !self.append {
+            return false;
         }
         true
     }
