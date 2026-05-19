@@ -2,10 +2,11 @@
  * Multi-threaded execve regression test.
  *
  * Phase 0: `execve(path, NULL, NULL)` (raw syscall, libc bypassed) is a
- *          legitimate ABI shape on Linux — `count_strings_kernel`
- *          accepts a NULL argv/envp and treats it as an empty pointer
- *          array. Resolving a nonexistent path must therefore reach
- *          path-resolution and yield ENOENT, never EFAULT.
+ *          legitimate ABI shape on Linux. Resolving a nonexistent path must
+ *          therefore reach path-resolution and yield ENOENT, never EFAULT.
+ *          A successful exec of an existing file must also synthesize an
+ *          empty-string argv[0], so the new image observes argc == 1 and
+ *          argv[0] == "" instead of crashing during stack construction.
  * Phase 1: a failed execve from a multi-threaded process must leave the
  *          thread group intact (POSIX says execve failures preserve the
  *          process state).
@@ -507,11 +508,51 @@ static int run_pending_sig_child(void)
     return 18;
 }
 
+extern char **environ;
+
+static int run_null_argv_child(int argc, char *argv[])
+{
+    int fail = 0;
+
+    if (argc != 1) {
+        fprintf(stderr, "FAIL: NULL argv child argc=%d, expected 1\n", argc);
+        fail = 1;
+    }
+    if (argv == NULL || argv[0] == NULL) {
+        fprintf(stderr, "FAIL: NULL argv child argv[0] is missing\n");
+        fail = 1;
+    } else if (argv[0][0] != '\0') {
+        fprintf(stderr,
+                "FAIL: NULL argv child argv[0]=%s, expected empty string\n",
+                argv[0]);
+        fail = 1;
+    }
+    if (argv != NULL && argc >= 1 && argv[1] != NULL) {
+        fprintf(stderr, "FAIL: NULL argv child argv[1] is not NULL\n");
+        fail = 1;
+    }
+    if (environ != NULL && environ[0] != NULL) {
+        fprintf(stderr, "FAIL: NULL envp child environ[0] is not NULL\n");
+        fail = 1;
+    }
+
+    if (fail) return 31;
+    printf("NULL_ARGV_CHILD_OK\n");
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     /* Unbuffered so phase markers reach the test runner before execve. */
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
+
+    /* Re-entry from the Phase 0 successful NULL argv/envp exec. */
+    if (argc == 0
+        || (argc == 1
+            && (argv == NULL || argv[0] == NULL || argv[0][0] == '\0'))) {
+        return run_null_argv_child(argc, argv);
+    }
 
     /* Re-entry from Phase 2 (non-leader exec) inside the fork child. */
     if (argc >= 2 && strcmp(argv[1], "nonleader-child") == 0) {
@@ -562,6 +603,27 @@ int main(int argc, char *argv[])
           "execve(path, NULL, NULL) to nonexistent path returns -1");
     CHECK(errno == ENOENT,
           "execve(path, NULL, NULL) returns ENOENT, not EFAULT");
+
+    pid_t null_argv_pid = fork();
+    CHECK(null_argv_pid != -1,
+          "fork for successful execve(path, NULL, NULL) test");
+    if (null_argv_pid == 0) {
+        syscall(SYS_execve, "/usr/bin/test-mt-execve",
+                (char *const *)NULL, (char *const *)NULL);
+        fprintf(stderr,
+                "FAIL: successful NULL argv/envp execve returned errno=%d (%s)\n",
+                errno, strerror(errno));
+        _exit(2);
+    }
+
+    int null_argv_status = 0;
+    pid_t null_argv_waited = waitpid(null_argv_pid, &null_argv_status, 0);
+    CHECK(null_argv_waited == null_argv_pid,
+          "waitpid returned the NULL argv child");
+    CHECK(WIFEXITED(null_argv_status),
+          "NULL argv child exited normally");
+    CHECK(WIFEXITED(null_argv_status) && WEXITSTATUS(null_argv_status) == 0,
+          "NULL argv child observed argc=1 and empty argv[0]");
 
     if (__fail > 0) {
         TEST_DONE();

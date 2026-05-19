@@ -1,4 +1,8 @@
-use alloc::{string::ToString, sync::Arc, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
 use core::{ffi::c_char, future::poll_fn, task::Poll};
 
 use ax_errno::{AxError, AxResult};
@@ -33,8 +37,10 @@ pub fn sys_execve(
     // than returning EFAULT. glibc's `execl(path, NULL)` and
     // `execve(path, NULL, NULL)` rely on this: userspace passes NULL
     // to mean "empty argv/envp" and we must accept it for ABI
-    // compatibility. (Same handling for `envp`.)
-    let args = if argv.is_null() {
+    // compatibility. Linux still supplies an empty string as argv[0]
+    // to the new image, so normalize both NULL and empty argv here.
+    // (Same NULL handling for `envp`, but without the argv[0] synthesis.)
+    let mut args = if argv.is_null() {
         Vec::new()
     } else {
         vm_load_until_nul(argv)?
@@ -42,6 +48,9 @@ pub fn sys_execve(
             .map(vm_load_string)
             .collect::<Result<Vec<_>, _>>()?
     };
+    if args.is_empty() {
+        args.push(String::new());
+    }
 
     let envs = if envp.is_null() {
         Vec::new()
@@ -200,6 +209,7 @@ pub fn sys_execve(
     let new_pt_root = new_aspace.page_table_root();
     let newaspace_arc = Arc::new(Mutex::new(new_aspace));
     proc_data.replace_aspace(newaspace_arc);
+    proc_data.mark_vm_aspace_private_after_exec();
 
     // Switch the hardware page table now that the new aspace is installed.
     curr.switch_page_table(new_pt_root);
