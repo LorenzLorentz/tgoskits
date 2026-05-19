@@ -84,7 +84,6 @@
 #include "test_framework.h"
 
 #include <fcntl.h>
-#include <linux/futex.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdint.h>
@@ -266,8 +265,13 @@ static int run_cloexec_check_child(void)
  * We use a static single-entry list. `g_robust_node.next` points back
  * to `&g_robust_head.list_first` (the kernel's `end_ptr` sentinel) so
  * the walk terminates after one entry. */
-/* `<linux/futex.h>` provides these but we redefine defensively in case
- * the cross-toolchain ships a stripped header. */
+/* `<linux/futex.h>` provides these but we redefine them locally: the
+ * loongarch64-linux-musl cross-toolchain in CI ships without that header
+ * at all, and other targets may ship a stripped version. SYS_futex
+ * itself comes from <sys/syscall.h>, which is portable. */
+#ifndef FUTEX_WAIT
+#define FUTEX_WAIT 0
+#endif
 #ifndef FUTEX_OWNER_DIED
 #define FUTEX_OWNER_DIED 0x40000000u
 #endif
