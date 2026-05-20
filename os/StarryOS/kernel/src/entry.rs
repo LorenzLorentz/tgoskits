@@ -18,7 +18,13 @@ use crate::{
 
 /// Initialize and run initproc.
 pub fn init(args: &[String], envs: &[String]) {
+    init_with_kallsyms(args, envs, "");
+}
+
+/// Initialize and run initproc with kernel symbol table data.
+pub fn init_with_kallsyms(args: &[String], envs: &[String], kallsyms_data: &str) {
     static_keys::global_init();
+    crate::kallsyms::kallsyms_init(kallsyms_data);
     pseudofs::mount_all().expect("Failed to mount pseudofs");
     spawn_alarm_task();
 

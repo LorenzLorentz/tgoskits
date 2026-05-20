@@ -499,6 +499,9 @@ pub struct ProcessData {
     /// Set after [`Self::release_aspace_slot_if_needed`] runs so `Drop` does not
     /// double-decrement [`AddrSpace::process_slots`].
     aspace_slot_released: AtomicBool,
+
+    /// Per-process kretprobe instance stack.
+    pub kretprobe_stack: SpinNoIrq<Vec<kprobe::retprobe::RetprobeInstance>>,
 }
 
 impl ProcessData {
@@ -547,6 +550,7 @@ impl ProcessData {
 
             vm_aspace_shared: AtomicBool::new(vm_aspace_shared),
             aspace_slot_released: AtomicBool::new(false),
+            kretprobe_stack: SpinNoIrq::new(Vec::new()),
         });
         // Clone the Arc in a separate statement: a temporary `SpinNoIrq` guard
         // from `lock()` lives until the end of the statement, so calling

@@ -18,9 +18,12 @@ pub mod dyn_debug; // Re-export debug macros for use in other modules. It will o
 pub mod entry;
 
 mod config;
+mod ebpf;
 mod file;
+pub mod kallsyms;
 #[cfg(feature = "kcov")]
 mod kcov;
+mod kprobe;
 mod mm;
 mod pseudofs;
 mod stop_machine;
