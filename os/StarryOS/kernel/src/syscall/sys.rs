@@ -20,6 +20,10 @@ use crate::task::{AsThread, processes};
 
 /// Sentinel value meaning "don't change this ID" (userspace passes -1 as signed,
 /// which becomes `u32::MAX` after the `as u32` cast in the dispatch table).
+///
+/// Note: paired with `uid_valid()` below — multi-arg `set*res*uid/gid` and
+/// `setre*uid/gid` use this sentinel for NOCHG semantics, while single-arg
+/// `setuid/setgid` reject it as EINVAL (no NOCHG slot exists there).
 const NOCHG: u32 = u32::MAX;
 const SYSLOG_ACTION_CLOSE: i32 = 0;
 const SYSLOG_ACTION_OPEN: i32 = 1;
@@ -93,6 +97,27 @@ impl SyslogState {
 
 lazy_static::lazy_static! {
     static ref SYSLOG_STATE: Mutex<SyslogState> = Mutex::new(SyslogState::new());
+}
+
+/// Mirror of Linux kernel `uid_valid()` / `make_kuid()` rejection: any caller-
+/// supplied UID/GID of `(uid_t)-1` (`u32::MAX`) is invalid outside the NOCHG
+/// sentinel slots of multi-arg setters. Single-arg `setuid`/`setgid` have no
+/// NOCHG semantic, so they must always reject `u32::MAX` with `EINVAL` before
+/// touching `cred` — otherwise a malicious caller writes the sentinel into
+/// real / effective / saved IDs and the next `setresuid` NOCHG path silently
+/// no-ops on already-poisoned credentials.
+fn uid_valid(id: u32) -> bool {
+    id != NOCHG
+}
+
+/// man 2 setuid §NOTES: "If uid is different from the old effective UID, the
+/// process will be forbidden from leaving core dumps."  Linux clears
+/// `mm->dumpable` in `commit_creds()`; StarryOS keeps the flag on `ProcessData`
+/// (single mm per process). Called by every uid-setter that may change `euid`.
+fn maybe_clear_dumpable_on_euid_change(old_euid: u32, new_euid: u32) {
+    if old_euid != new_euid {
+        current().as_thread().proc_data.set_dumpable(0);
+    }
 }
 
 pub fn sys_getuid() -> AxResult<isize> {
@@ -176,6 +201,7 @@ pub fn sys_setresuid(ruid: u32, euid: u32, suid: u32) -> AxResult<isize> {
 
     // fsuid always tracks euid.
     new.fsuid = new.euid;
+    maybe_clear_dumpable_on_euid_change(old.euid, new.euid);
     thread.set_cred(new);
     Ok(0)
 }
@@ -228,6 +254,11 @@ pub fn sys_setresgid(rgid: u32, egid: u32, sgid: u32) -> AxResult<isize> {
 
 pub fn sys_setuid(uid: u32) -> AxResult<isize> {
     debug!("sys_setuid <= uid: {uid}");
+    // Linux setuid(2) §ERRORS: "EINVAL — uid is not valid in this user namespace."
+    // Single-arg setuid has no NOCHG sentinel; (uid_t)-1 must be rejected.
+    if !uid_valid(uid) {
+        return Err(AxError::InvalidInput);
+    }
     let thread = current();
     let thread = thread.as_thread();
     let old = thread.cred();
@@ -247,12 +278,17 @@ pub fn sys_setuid(uid: u32) -> AxResult<isize> {
     }
 
     new.fsuid = new.euid;
+    maybe_clear_dumpable_on_euid_change(old.euid, new.euid);
     thread.set_cred(new);
     Ok(0)
 }
 
 pub fn sys_setgid(gid: u32) -> AxResult<isize> {
     debug!("sys_setgid <= gid: {gid}");
+    // Linux setgid(2) §ERRORS: "EINVAL — gid is not valid in this user namespace."
+    if !uid_valid(gid) {
+        return Err(AxError::InvalidInput);
+    }
     let thread = current();
     let thread = thread.as_thread();
     let old = thread.cred();
@@ -316,6 +352,7 @@ pub fn sys_setreuid(ruid: u32, euid: u32) -> AxResult<isize> {
     }
 
     new.fsuid = new.euid;
+    maybe_clear_dumpable_on_euid_change(old.euid, new.euid);
     thread.set_cred(new);
     Ok(0)
 }
@@ -356,6 +393,85 @@ pub fn sys_setregid(rgid: u32, egid: u32) -> AxResult<isize> {
     new.fsgid = new.egid;
     thread.set_cred(new);
     Ok(0)
+}
+
+// ── setfsuid / setfsgid ─────────────────────────────────────────────
+//
+// man 2 setfsuid:
+//   "setfsuid() sets the user ID that the Linux kernel uses to check for all
+//    accesses to the filesystem. ... On both success and failure, this call
+//    returns the previous filesystem user ID of the caller."
+//   "When the effective user ID is changed (via setuid(), setresuid(), etc.),
+//    the kernel also changes the filesystem user ID to the new value of the
+//    effective user ID."
+//   Query trick: passing `(uid_t)-1` leaves the fsuid unchanged but still
+//   returns the previous value — used by libc to read the current fsuid.
+
+pub fn sys_setfsuid(fsuid: u32) -> AxResult<isize> {
+    debug!("sys_setfsuid <= fsuid: {fsuid}");
+    let thread = current();
+    let thread = thread.as_thread();
+    let old = thread.cred();
+    let prev_fsuid = old.fsuid;
+
+    // (uid_t)-1 = query-only: don't change, just return prev.
+    if fsuid == NOCHG {
+        return Ok(prev_fsuid as isize);
+    }
+
+    // Linux: setfsuid silently ignores an invalid fsuid but always returns the
+    // previous fsuid (never reports error). Unprivileged callers may only set
+    // fsuid to one of {uid, euid, suid, fsuid}; CAP_SETUID allows arbitrary.
+    let allowed = old.has_cap_setuid()
+        || fsuid == old.uid
+        || fsuid == old.euid
+        || fsuid == old.suid
+        || fsuid == old.fsuid;
+
+    if allowed {
+        let mut new = (*old).clone();
+        new.fsuid = fsuid;
+        thread.set_cred(new);
+        // man 2 prctl PR_SET_DUMPABLE: dumpable is also reset to
+        // /proc/sys/fs/suid_dumpable (default 0) when filesystem uid changes.
+        // Without this, `PR_SET_DUMPABLE(1) -> setfsuid(new) -> PR_GET_DUMPABLE`
+        // would falsely return 1, breaking Linux semantics (ZR233 review #718).
+        if fsuid != prev_fsuid {
+            maybe_clear_dumpable_on_euid_change(prev_fsuid, fsuid);
+        }
+    }
+    // Always return previous fsuid, even when the request was ignored.
+    Ok(prev_fsuid as isize)
+}
+
+pub fn sys_setfsgid(fsgid: u32) -> AxResult<isize> {
+    debug!("sys_setfsgid <= fsgid: {fsgid}");
+    let thread = current();
+    let thread = thread.as_thread();
+    let old = thread.cred();
+    let prev_fsgid = old.fsgid;
+
+    if fsgid == NOCHG {
+        return Ok(prev_fsgid as isize);
+    }
+
+    let allowed = old.has_cap_setgid()
+        || fsgid == old.gid
+        || fsgid == old.egid
+        || fsgid == old.sgid
+        || fsgid == old.fsgid;
+
+    if allowed {
+        let mut new = (*old).clone();
+        new.fsgid = fsgid;
+        thread.set_cred(new);
+        // man 2 prctl PR_SET_DUMPABLE: dumpable is also reset when filesystem
+        // gid changes (ZR233 review #718, same as fsuid path above).
+        if fsgid != prev_fsgid {
+            maybe_clear_dumpable_on_euid_change(prev_fsgid, fsgid);
+        }
+    }
+    Ok(prev_fsgid as isize)
 }
 
 pub fn sys_getgroups(size: usize, list: *mut u32) -> AxResult<isize> {
