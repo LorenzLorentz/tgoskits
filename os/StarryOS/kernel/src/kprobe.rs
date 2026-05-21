@@ -231,6 +231,24 @@ fn trapframe_to_ptregs(tf: &ax_hal::context::TrapFrame) -> kprobe::PtRegs {
             unused2: 0,
         }
     }
+    #[cfg(target_arch = "loongarch64")]
+    {
+        // axcpu's `GeneralRegisters` is `#[repr(C)]` with 32 consecutive
+        // `usize` fields in Linux pt_regs order; the same transmute is
+        // used in `components/axcpu/src/loongarch64/unaligned.rs`.
+        let regs: [usize; 32] = unsafe { core::mem::transmute(tf.regs) };
+        kprobe::PtRegs {
+            regs,
+            orig_a0: tf.regs.a0,
+            csr_era: tf.era,
+            csr_badvaddr: 0,
+            csr_crmd: 0,
+            csr_prmd: tf.prmd,
+            csr_euen: 0,
+            csr_ecfg: 0,
+            csr_estat: 0,
+        }
+    }
 }
 
 fn ptregs_write_back(pt: &kprobe::PtRegs, tf: &mut ax_hal::context::TrapFrame) {
@@ -297,6 +315,13 @@ fn ptregs_write_back(pt: &kprobe::PtRegs, tf: &mut ax_hal::context::TrapFrame) {
         tf.x = pt.regs;
         tf.elr = pt.pc;
         tf.spsr = pt.pstate;
+    }
+    #[cfg(target_arch = "loongarch64")]
+    {
+        let regs: &mut [usize; 32] = unsafe { core::mem::transmute(&mut tf.regs) };
+        *regs = pt.regs;
+        tf.era = pt.csr_era;
+        tf.prmd = pt.csr_prmd;
     }
 }
 
