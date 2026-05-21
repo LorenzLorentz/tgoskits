@@ -124,10 +124,10 @@ impl KernelModuleHelper for KmodHelper {
         if name.is_empty() {
             return None;
         }
-        match crate::kallsyms::lookup_name(name) {
+        match crate::kallsyms::kallsyms_lookup_name(name) {
             Some(addr) => Some(addr as usize),
             None => {
-                axlog::error!("kmod: failed to resolve symbol `{}`", name);
+                error!("kmod: failed to resolve symbol `{}`", name);
                 None
             }
         }
@@ -159,7 +159,7 @@ pub fn init_module(elf: &[u8], params: Option<&str>) -> AxResult<()> {
 
     let name = owner.name().to_string();
     let ret = owner.call_init().expect("module init can only run once");
-    axlog::warn!("module `{name}` init returned {ret}");
+    warn!("module `{name}` init returned {ret}");
 
     let mut modules = MODULES.lock();
     if modules.contains_key(&name) {
@@ -176,7 +176,7 @@ pub fn delete_module(name: &str) -> AxResult<()> {
     let mut modules = MODULES.lock();
     let mut owner = modules.remove(name).ok_or(AxError::NotFound)?;
     owner.call_exit();
-    axlog::warn!("module `{name}` exited");
+    warn!("module `{name}` exited");
     Ok(())
 }
 
