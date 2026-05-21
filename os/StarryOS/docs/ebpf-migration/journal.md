@@ -64,3 +64,34 @@
 - Task 状态: #3 completed.
 
 ---
+
+## 2026-05-21 — Task #4 integration base 建立
+
+- author: claude
+- 分支: `feat/ebpf-integration-base`, HEAD `8ad9a0d09` (合并后); 后追加
+  docs commit, 最终 HEAD = 见 `git rev-parse feat/ebpf-integration-base`
+- 步骤:
+  1. `git checkout -b feat/ebpf-integration-base rcore/dev` (起点
+     `a2ea1e271`)
+  2. `git merge --no-ff pr-673-tp` — 干净, 自动合并 Cargo.lock 与
+     `syscall/fs/fd_ops.rs`, 无冲突, commit `83dcc33a9`
+  3. `git merge --no-ff pr-805-ebpf-observability` — 2 个冲突:
+     - `kernel/src/entry.rs`: 两 PR 都在 `init` 中 init_*; 解决方式
+       保留双方 (kallsyms_init + tracepoint_init), kallsyms 在前
+     - `Cargo.lock`: starry-kernel 依赖列表合并 ktracepoint(673) +
+       kprobe(805)
+     commit `8ad9a0d09`
+  4. 追加 docs commit (workflow + Phase 1 audits + journal)
+- 验证:
+  - `cargo fmt --all -- --check` ✅ (无输出)
+  - `cargo xtask starry build --arch x86_64` ✅ (1m 11s, 静态 ELF + bin)
+  - `cargo xtask starry build --arch aarch64` ✅ (~1m)
+  - `cargo xtask starry build --arch riscv64` ✅ (1m 05s)
+  - loongarch64 未跑 (Task #4 范围内三架构, loongarch64 留给具体 PR)
+  - `cargo xtask clippy --package starry-kernel` ❌ 11/11 fail, 但
+    **rcore/dev pristine 也同样 fail** (Mac aarch64 host 上的 ax-percpu
+    内联汇编与 const trait 报错), 不是 merge 引入。本机 host 上的
+    clippy 暂不可用, 后续依赖 CI 上的 Linux runner。
+- Task 状态: #4 completed (待用户确认是否 push 到 origin)。
+
+---
