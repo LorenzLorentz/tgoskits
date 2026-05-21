@@ -92,6 +92,28 @@
     **rcore/dev pristine 也同样 fail** (Mac aarch64 host 上的 ax-percpu
     内联汇编与 const trait 报错), 不是 merge 引入。本机 host 上的
     clippy 暂不可用, 后续依赖 CI 上的 Linux runner。
-- Task 状态: #4 completed (待用户确认是否 push 到 origin)。
+- Task 状态: #4 completed。
+
+---
+
+## 2026-05-21 — 分支整理与推送 (Push to origin)
+
+- author: claude
+- 用户决策: docs 只本地用, 不上游 → 把 docs commits 从 integration base
+  剥离, 留作独立 `docs/ebpf-migration-local` 分支。
+- 操作:
+  1. `git branch docs/ebpf-migration-local` (在 `f9ebd62ca` 处保留 docs)
+  2. `git reset --hard 8ad9a0d09` (integration base 回到 merges-only)
+  3. `git push origin feat/ebpf-integration-base:feat/ebpf-integration-base`
+  4. `git push -u origin docs/ebpf-migration-local`
+- 远端结果:
+  - `origin/feat/ebpf-integration-base` @ `8ad9a0d09` — 干净 stacking parent
+    (仅含 #673 + #805 merge), 是 PR-A/B 的 base
+  - `origin/docs/ebpf-migration-local` @ `f9ebd62ca` (+ 本 commit) — 含
+    workflow + audits + journal 的本地协作分支, 不会进 upstream
+  - tracking 已修正为各自的 origin 分支 (之前 `feat/ebpf-integration-base`
+    误 track 到 `rcore/dev`, 触发 "push to dev rejected" — 已修正,
+    没有任何 force-push 到 dev 发生)
+- 下一步: 用户审阅 Phase 0-2 产出后再决定启动 Task #5/#6。
 
 ---
