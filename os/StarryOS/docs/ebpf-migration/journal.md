@@ -117,3 +117,66 @@
 - 下一步: 用户审阅 Phase 0-2 产出后再决定启动 Task #5/#6。
 
 ---
+
+## 2026-05-21 — Task #5 PR-A: eBPF 运行时移植落地
+
+- author: claude (代 LorenzLorentz)
+- 分支: `feat/starry-ebpf-runtime` @ `314ee11e5` (起点 `8ad9a0d09`,
+  从 `feat/ebpf-integration-base` 切出)
+- 单 commit, +1873/-239, 18 文件:
+  - `os/StarryOS/kernel/src/ebpf.rs` 删除, 改为 `ebpf/` 目录
+    (mod / map / prog / transform), 替换 #805 的 stub.
+  - 新增 `os/StarryOS/kernel/src/perf/` (mod / bpf / kprobe /
+    tracepoint / raw_tracepoint / uprobe), 共 6 文件.
+  - 新增 `os/StarryOS/kernel/src/lock_api.rs` (KSpinNoPreempt<T>
+    包装, 满足 `lock_api::RawMutex`, 供 kprobe::Uprobe 等需要 lock_api
+    风格类型参数的 API 使用).
+  - `kprobe.rs` 增量: 暴露 KernelKprobe / KernelKretprobe /
+    KprobeAuxiliary 别名 + register_/unregister_kprobe/kretprobe.
+  - `tracepoint/mod.rs` 增量: lookup_ext_tracepoint /
+    find_ext_tracepoint_by_name 公开函数.
+  - `entry.rs`: 追加 ebpf::init_ebpf() 与 perf::perf_event_init().
+  - `Cargo.toml`: 启用 kbpf-basic = "0.5", 新增 rbpf 0.4.
+- 关键 API 适配:
+  - 全部 `axhal/axalloc/axmm/axkspin/...` → `ax_hal/ax_alloc/ax_mm/
+    ax_kspin/...` (crate-fork-audit §6).
+  - 拼写: 源 `bpf/tansform.rs` → `ebpf/transform.rs`, commit 说明.
+  - ktracepoint 0.5 → 0.6: 旧 `TracePoint::register_event_callback
+    (id, callback)` 替换为 `ExtTracePoint::register
+    (TraceCallbackType::Event(Arc<TraceEventFunc>))`. raw tp 同理.
+  - kallsyms 查询走 #805 的 `crate::kallsyms::lookup_name`, 不再
+    依赖源仓库的 `pseudofs::KALLSYMS`.
+  - BpfError ↔ AxError 显式映射 (kbpf-basic 的 axerrno 与 tgoskits
+    的 ax-errno 是两个不同的 crate, 即使语义同源).
+- 范围裁剪 (留给后续 PR):
+  - PERF_TYPE_UPROBE 暂返回 Unsupported — 依赖 ProcessData 的
+    uprobe_manager / uprobe_point_list 字段与 AddrSpace::memoryset
+    accessor, 两者均未在 #805 引入. (待 PR-A-followup 或 PR-B
+    顺手扩 task/ProcessData.)
+  - BpfPerfEvent::do_mmap 路径不接 FileLike (tgoskits 的 FileLike
+    无源仓库的 custom_mmap hook), ringbuf mmap 后续 PR 处理.
+  - eBPF procfs 节点 (bpf_stats_enabled 等) 未涉及.
+- ⚠️ **上游阻塞**: kbpf-basic 0.5.5 传递依赖 `printf-compat = "0.3"`,
+  printf-compat 0.3.1 在 nightly-2026-04-27 不能编译
+  (`core::ffi::VaList::arg` API 已重命名/移除). printf-compat 0.4.0
+  已在 crates.io 但 semver 不兼容, 必须等 Godones/ext_ktrace 把
+  kbpf-basic 的依赖升到 0.4. PR-A merge 等这件事.
+  - 临时验证选项: vendor printf-compat 0.4 到 components/ 并 path-patch
+    (workflow §4.1 允许, 因为不是个人 fork). 用户选择不做, 直接提交
+    代码 + 在 PR body 标 blocked.
+- 验证状态:
+  - `cargo fmt --package starry-kernel -- --check` ✅
+  - `cargo check --package starry-kernel --target x86_64-unknown-none`
+    ❌ blocked on printf-compat 0.3 编译失败 (上游问题, 与本 PR 改动
+    无关).
+  - 三架构 build / clippy 11 features / sync-lint / qemu 烟测均
+    blocked on 同一问题.
+- 下一步:
+  1. 在 ext_ktrace 仓 (kbpf-basic / printf-compat 0.4) 推 patch.
+  2. 待上游发版后回本 PR 重跑 §6 全套验证.
+  3. 可与 Task #6 (PR-B LKM) 并行启动, base 同样是
+     `feat/ebpf-integration-base` (不依赖 PR-A 改动).
+- Task 状态: #5 in_progress (待上游解锁后完成验证); PR-B 仍 pending,
+  可领。
+
+---
