@@ -877,6 +877,13 @@ fn builder(fs: Arc<SimpleFs>) -> DirMaker {
         SimpleDir::new_maker(fs.clone(), Arc::new(dynamic_debug))
     });
 
+    root.add(
+        "kallsyms",
+        SimpleFile::new_regular(fs.clone(), || {
+            Ok(crate::kallsyms::kallsyms_format_all().unwrap_or_default())
+        }),
+    );
+
     let proc_dir = ProcFsHandler(fs.clone());
     SimpleDir::new_maker(fs, Arc::new(proc_dir.chain(root)))
 }

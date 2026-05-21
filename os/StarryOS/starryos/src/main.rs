@@ -8,6 +8,10 @@ use alloc::{borrow::ToOwned, vec::Vec};
 
 pub const CMDLINE: &[&str] = &["/bin/sh", "-c", include_str!("init.sh")];
 
+mod kallsyms_data {
+    include!(concat!(env!("OUT_DIR"), "/kallsyms_data.rs"));
+}
+
 #[unsafe(no_mangle)]
 fn main() {
     let args = CMDLINE
@@ -17,7 +21,7 @@ fn main() {
         .collect::<Vec<_>>();
     let envs = [];
 
-    starry_kernel::entry::init(&args, &envs);
+    starry_kernel::entry::init_with_kallsyms(&args, &envs, kallsyms_data::KALLSYMS_DATA);
 }
 
 #[cfg(all(
