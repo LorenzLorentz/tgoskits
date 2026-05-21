@@ -180,3 +180,59 @@
   可领。
 
 ---
+
+## 2026-05-21 — Task #6 PR-B: LKM (kmod-loader) 移植落地
+
+- author: claude (代 LorenzLorentz)
+- 分支: `feat/starry-lkm` @ `2a115432e` (起点 `8ad9a0d09`, 与 PR-A
+  并行从 `feat/ebpf-integration-base` 切出, 不依赖 PR-A 改动)
+- 单 commit, 11 文件:
+  - 新增 `os/StarryOS/kernel/src/kmod/` (mod.rs + kprint.rs).
+  - 新增 `os/StarryOS/kernel/src/syscall/kmod.rs` (init_module /
+    finit_module / delete_module).
+  - `syscall/mod.rs`: 注册三条 syscall 分派.
+  - `lib.rs`: 新增 `mod kmod;`.
+  - `entry.rs`: 追加 `crate::kmod::init_kmod()`.
+  - `Cargo.toml`: 启用 kmod (kmod-tools) / kmod-loader / lwprintf-rs.
+  - 新增 `os/StarryOS/scripts/kmod-linker.ld` (从源仓
+    modules/kmod-linker.ld 字节级移植).
+  - 新增 `scripts/axbuild/src/starry/kmod.rs` + 注入到 starry/mod.rs
+    Command 枚举: 暴露 `cargo xtask starry kmod build --arch <arch>
+    [--module <path> | --all]` 子命令.
+- 关键决策:
+  - **不引入 Makefile / make/ / modules/kmod.mk** (workflow §5.3
+    硬要求). 取而代之是 `cargo xtask starry kmod build`, 内部串
+    `cargo build` + `rust-lld -r -T kmod-linker.ld --whole-archive`.
+  - shim/{block,mq,xarray}.rs **不移植**: 源仓 kmod/mod.rs 用
+    `// mod shim;` 显式注释禁用, block/mq 是 null_blk 的 WIP, 与
+    PR-B 完成判据无关. 把这件事留给 PR-C 或 PR-B-followup, 配合
+    null_blk 示例再补.
+  - KALLSYMS 查询走 #805 `crate::kallsyms::lookup_name`, 不走源仓
+    `pseudofs::KALLSYMS`. 与 PR-A 一致.
+  - syscall 入口扁平为 `syscall/kmod.rs` 而非 `syscall/kmod/mod.rs`,
+    保持 tgoskits 小子系统的现有命名风格 (cf. `syscall/signal.rs`).
+- 验证状态:
+  - `cargo fmt --all -- --check` ✅
+  - `cargo check -p axbuild` ✅ (xtask 编译通过)
+  - `cargo check -p starry-kernel --target x86_64-unknown-none`
+    ❌ blocked: lwprintf-rs 0.3.3 build.rs 调 `gcc -print-sysroot`,
+    本地 Mac 没装 cross-toolchain. CI runner 上的 Linux 镜像
+    (ghcr.io/rcore-os/tgoskits-container) 应当有, 等 CI 验证.
+  - 同样依赖 nightly `#![feature(c_variadic)]`, 若 nightly-2026-04-27
+    上 bindgen 生成的 VaList 用法与新 API 不兼容, 还需追加 patch
+    (与 PR-A 的 printf-compat 同类问题).
+- ⚠️ **Blocked**: 与 PR-A 类似但是更轻 — 不是 semver 不兼容, 而是
+  build 环境差异 (gcc cross-compile). 代码本身可独立 review, 等
+  CI Linux runner 跑出更精确的状态.
+- 不在本 PR 范围:
+  - shim/{block,mq,xarray}.rs (源仓也禁用).
+  - modules/{hello,kebpf} 示例 (Task #7 / PR-C).
+  - qemu 内 insmod hello.ko 烟测 (依赖 PR-C 提供 hello 模块).
+- 下一步:
+  1. CI Linux 上跑 `cargo xtask starry build --arch x86_64` 验证
+     kernel 含 kmod 子系统能正常编译.
+  2. 与 PR-C (kmod 示例) 同步推, 形成 "kmod 内核侧 + 示例" 完整链.
+- Task 状态: #6 in_progress (待 CI 跑出验证), 可与 PR-A 并行
+  review.
+
+---
