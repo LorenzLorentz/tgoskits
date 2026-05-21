@@ -13,6 +13,7 @@ pub mod board;
 pub mod build;
 pub mod config;
 pub mod example;
+pub mod kmod;
 pub mod perf;
 pub mod quick_start;
 pub(crate) mod resolver;
@@ -45,6 +46,8 @@ pub enum Command {
     Uboot(ArgsUboot),
     /// Build and run StarryOS on a remote board
     Board(ArgsBoard),
+    /// Build StarryOS loadable kernel modules (`.ko`)
+    Kmod(kmod::ArgsKmod),
 }
 
 #[derive(Args, Clone)]
@@ -179,6 +182,7 @@ impl Starry {
             Command::Board(args) => self.board(args).await,
             Command::Test(args) => self.test(args).await,
             Command::Example(args) => self.example(args).await,
+            Command::Kmod(args) => self.kmod(args).await,
         }
     }
 

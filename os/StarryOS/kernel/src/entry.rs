@@ -27,6 +27,7 @@ pub fn init_with_kallsyms(args: &[String], envs: &[String], kallsyms_data: &str)
     static_keys::global_init();
     crate::kallsyms::kallsyms_init(kallsyms_data);
     tracepoint_init().expect("Failed to initialize tracepoints");
+    crate::kmod::init_kmod();
 
     pseudofs::mount_all().expect("Failed to mount pseudofs");
     spawn_alarm_task();

@@ -23,6 +23,7 @@ mod file;
 pub mod kallsyms;
 #[cfg(feature = "kcov")]
 mod kcov;
+mod kmod;
 mod kprobe;
 mod mm;
 mod pseudofs;
