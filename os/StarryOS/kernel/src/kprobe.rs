@@ -1,8 +1,17 @@
-use alloc::alloc::{Layout, alloc, dealloc};
+use alloc::{
+    alloc::{Layout, alloc, dealloc},
+    sync::Arc,
+};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use ax_memory_addr::{MemoryAddr, PAGE_SIZE_4K, VirtAddr};
-use kprobe::KprobeAuxiliaryOps;
+use kprobe::{
+    KprobeAuxiliaryOps, KretprobeBuilder, ProbeBuilder, ProbeManager, ProbePointList,
+    register_kprobe as kprobe_crate_register_kprobe,
+    register_kretprobe as kprobe_crate_register_kretprobe,
+    unregister_kprobe as kprobe_crate_unregister_kprobe,
+    unregister_kretprobe as kprobe_crate_unregister_kretprobe,
+};
 use lock_api::RawMutex;
 
 use crate::task::AsThread;
@@ -136,8 +145,23 @@ impl KprobeAuxiliaryOps for KernelKprobeOps {
 }
 
 type KprobeManager = kprobe::ProbeManager<KernelRawMutex, KernelKprobeOps>;
+type KprobePointList = ProbePointList<KernelKprobeOps>;
+
+/// Type alias matching what the upstream `ebpf-kmod` perf module names a
+/// concrete `kprobe::Kprobe` parameterized on the kernel's mutex and
+/// auxiliary ops.
+pub type KernelKprobe = kprobe::Kprobe<KernelRawMutex, KernelKprobeOps>;
+/// Type alias matching what the upstream `ebpf-kmod` perf module names a
+/// concrete `kprobe::Kretprobe`.
+pub type KernelKretprobe = kprobe::Kretprobe<KernelRawMutex, KernelKprobeOps>;
+/// Re-export name used by `perf/{kprobe,uprobe}.rs` as the
+/// `KprobeAuxiliaryOps` impl: source uses `KprobeAuxiliary`, we keep the
+/// `KernelKprobeOps` impl from #805 unchanged and alias it here.
+pub type KprobeAuxiliary = KernelKprobeOps;
 
 static KPROBE_MANAGER: ax_sync::spin::SpinNoIrq<Option<KprobeManager>> =
+    ax_sync::spin::SpinNoIrq::new(None);
+static KPROBE_POINT_LIST: ax_sync::spin::SpinNoIrq<Option<KprobePointList>> =
     ax_sync::spin::SpinNoIrq::new(None);
 
 fn with_manager<F, R>(f: F) -> R
@@ -149,6 +173,42 @@ where
         *guard = Some(KprobeManager::default());
     }
     f(guard.as_mut().unwrap())
+}
+
+fn with_manager_and_list<F, R>(f: F) -> R
+where
+    F: FnOnce(&mut KprobeManager, &mut KprobePointList) -> R,
+{
+    let mut mgr = KPROBE_MANAGER.lock();
+    if mgr.is_none() {
+        *mgr = Some(KprobeManager::default());
+    }
+    let mut list = KPROBE_POINT_LIST.lock();
+    if list.is_none() {
+        *list = Some(KprobePointList::new());
+    }
+    f(mgr.as_mut().unwrap(), list.as_mut().unwrap())
+}
+
+/// Register a kprobe described by `builder` into the global manager and
+/// return the live `Arc<KernelKprobe>`.
+pub fn register_kprobe(builder: ProbeBuilder<KernelKprobeOps>) -> Arc<KernelKprobe> {
+    with_manager_and_list(|mgr, list| kprobe_crate_register_kprobe(mgr, list, builder))
+}
+
+/// Unregister a previously registered kprobe.
+pub fn unregister_kprobe(kprobe: Arc<KernelKprobe>) {
+    with_manager_and_list(|mgr, list| kprobe_crate_unregister_kprobe(mgr, list, kprobe));
+}
+
+/// Register a kretprobe and return its live handle.
+pub fn register_kretprobe(builder: KretprobeBuilder<KernelRawMutex>) -> Arc<KernelKretprobe> {
+    with_manager_and_list(|mgr, list| kprobe_crate_register_kretprobe(mgr, list, builder))
+}
+
+/// Unregister a previously registered kretprobe.
+pub fn unregister_kretprobe(kretprobe: Arc<KernelKretprobe>) {
+    with_manager_and_list(|mgr, list| kprobe_crate_unregister_kretprobe(mgr, list, kretprobe));
 }
 
 fn trapframe_to_ptregs(tf: &ax_hal::context::TrapFrame) -> kprobe::PtRegs {

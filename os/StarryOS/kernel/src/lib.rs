@@ -24,7 +24,9 @@ pub mod kallsyms;
 #[cfg(feature = "kcov")]
 mod kcov;
 mod kprobe;
+mod lock_api;
 mod mm;
+mod perf;
 mod pseudofs;
 mod stop_machine;
 mod syscall;
