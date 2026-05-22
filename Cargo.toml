@@ -135,6 +135,21 @@ members = [
     "tools/qperf/analyzer",
     "xtask",
 ]
+# eBPF userspace programs under os/StarryOS/user/ebpf/ are independent Cargo
+# workspaces (each carries its own [workspace] with aya git deps and a
+# bpfel-unknown-none cross-compile pipeline). They must be excluded so cargo
+# does not try to fold them into this workspace and trip on the nested-workspace
+# rule. They are built via `cargo xtask starry user-ebpf build`
+# (scripts/axbuild/src/starry/user_ebpf.rs).
+exclude = [
+    "os/StarryOS/user/ebpf/async_test",
+    "os/StarryOS/user/ebpf/kret",
+    "os/StarryOS/user/ebpf/mytrace",
+    "os/StarryOS/user/ebpf/rawtp",
+    "os/StarryOS/user/ebpf/syscall_ebpf",
+    "os/StarryOS/user/ebpf/upb",
+    "os/StarryOS/user/ebpf/upb2",
+]
 
 [workspace.dependencies]
 # Local workspace crates

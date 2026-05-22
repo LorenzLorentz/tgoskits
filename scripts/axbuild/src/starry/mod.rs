@@ -22,6 +22,7 @@ pub mod quick_start;
 pub(crate) mod resolver;
 pub mod rootfs;
 pub mod test;
+pub mod user_ebpf;
 
 /// StarryOS subcommands
 #[derive(Subcommand)]
@@ -51,6 +52,9 @@ pub enum Command {
     Board(ArgsBoard),
     /// Build StarryOS loadable kernel modules (`.ko`)
     Kmod(kmod::ArgsKmod),
+    /// Cross-compile eBPF userspace programs under os/StarryOS/user/ebpf/
+    #[command(name = "user-ebpf")]
+    UserEbpf(user_ebpf::ArgsUserEbpf),
 }
 
 #[derive(Args, Clone)]
@@ -192,6 +196,7 @@ impl Starry {
             Command::Test(args) => self.test(args).await,
             Command::App(args) => self.app_command(args).await,
             Command::Kmod(args) => self.kmod(args).await,
+            Command::UserEbpf(args) => user_ebpf::run(self, args).await,
         }
     }
 
