@@ -1,0 +1,41 @@
+[package]
+name = "kebpf"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+ax-feat.workspace = true
+ax-log.workspace = true
+ax-errno.workspace = true
+ax-hal.workspace = true
+ax-io.workspace = true
+starry-kernel.workspace = true
+
+kmod = { version = "0.2", package = "kmod-tools" }
+kbpf-basic = "0.5"
+
+[features]
+default = []
+qemu = [
+    "ax-feat/defplat",
+    "ax-feat/bus-pci",
+    "ax-feat/display",
+    "starry-kernel/input",
+    "starry-kernel/vsock",
+    "ax-feat/fs-ng-times",
+    "starry-kernel/dev-log",
+]
+smp = ["ax-feat/smp", "axplat-riscv64-visionfive2?/smp"]
+
+vf2 = ["dep:axplat-riscv64-visionfive2", "ax-feat/driver-sdmmc"]
+
+[target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies.axplat-riscv64-visionfive2]
+workspace = true
+features = ["fp-simd", "irq", "rtc"]
+optional = true

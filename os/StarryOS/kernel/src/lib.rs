@@ -20,12 +20,12 @@ pub mod entry;
 
 mod cgroup;
 mod config;
-mod ebpf;
-mod file;
+pub mod ebpf;
+pub mod file;
 mod kmod;
 mod kprobe;
-mod mm;
-mod perf;
+pub mod mm;
+pub mod perf;
 mod pseudofs;
 mod stop_machine;
 mod syscall;
