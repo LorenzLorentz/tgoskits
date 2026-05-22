@@ -5,6 +5,96 @@
 
 ---
 
+## 2026-05-23 — Task #8 PR-D: 用户态 eBPF 程序移植落地
+
+- author: claude (代 LorenzLorentz)
+- 分支: `feat/starry-ebpf-userspace` @ `2f2533968` (起点 `6ad006d00`,
+  从 `feat/starry-ebpf-runtime` 切出, 不依赖 PR-B/PR-C; 与 PR-A 的
+  内核 eBPF 运行时为唯一上游依赖, 符合 workflow §3.1)
+- 单 commit, +7147 净行, 93 文件:
+  - `os/StarryOS/user/ebpf/{async_test,kret,rawtp,mytrace,syscall_ebpf,
+    upb,upb2}/` 7 个独立 Cargo workspace (落点决策见下).
+  - 各 program 三件套 (`<prog>/`, `<prog>-common/`, `<prog>-ebpf/`)
+    字节级移植自源仓 `user/musl/<prog>/`, aya git deps 与 nightly
+    rust-src + bpf-linker pipeline 不变.
+  - `os/StarryOS/user/ebpf/.cargo/config.toml`: 各 musl target 的 linker
+    与 `target-feature=-crt-static` 配置 (与源仓 1:1).
+  - `os/StarryOS/user/ebpf/README.md`: 7 个程序的内核侧依赖矩阵、
+    构建入口指引、`upb`/`upb2` 待 perf/uprobe 接通的限制说明.
+  - `Cargo.toml` (仓根): `[workspace] exclude` 摘出 7 个嵌套 workspace
+    (否则 cargo `nested workspace not allowed`).
+  - 新增 `scripts/axbuild/src/starry/user_ebpf.rs` + `mod.rs` Command
+    枚举: 暴露 `cargo xtask starry user-ebpf {list, build --program
+    <name>|--all --arch <arch>}` 子命令.
+- 落点决策 (workflow §5.4, 用户选定 "推荐项"):
+  **`os/StarryOS/user/ebpf/`** (而非 `test-suit/starryos/ebpf/`).
+  原因:
+  1. 每个程序自带 `[workspace]` + aya git deps + nightly toolchain,
+     与 test-suit 现有 `plain`/`c`/`sh`/`python`/`grouped` pipeline 不匹配.
+  2. 构建走独立 musl + bpfel pipeline, 与 starry kernel binary 闭包
+     完全独立; 保留源仓的 `user/musl/` 形态便于将来双向迁移.
+  3. 测试驱动方式由 `cargo xtask starry user-ebpf build` 提供, 不需要
+     依赖 test-suit asset-pipeline.
+  *diff-audit.md §M* 已同步更新 (TBD → `os/StarryOS/user/ebpf/`).
+- 关键决策:
+  - **不引入 Makefile** (workflow §5.3 硬要求). 源仓 `user/musl/Makefile`
+    + 各 `.cargo/config.toml` 的 linker 设置全部翻译进 xtask 子命令 +
+    `os/StarryOS/user/ebpf/.cargo/config.toml`.
+  - **`[workspace] exclude`** 而非 `members`: 因为每个 program 是
+    `[workspace]` 自带的子 workspace, 嵌入主 workspace 会触发
+    "nested workspace not allowed".
+  - **保留 git deps 写法**: `aya = { git = "https://github.com/aya-rs/aya", ... }`
+    (源仓写法, 上游未发到 crates.io). 不引入 `[patch.crates-io]`,
+    符合 workflow §4.1.
+  - **commit Cargo.lock**: 7 个 Cargo.lock 都入库 (~5500 行总, 与
+    diff-audit §H 风险讨论一致). 锁定 aya HEAD, 保证 CI 复现.
+  - **`async_test` 是 7 程序中唯一无 aya 的 crate**: 仅是 tokio +
+    `core::arch::breakpoint` 的 smoke 测试, 与 eBPF 子系统无关, 保留
+    作为 host-cargo build 可达成 "100% workspace 通过" 的最低判据.
+- 范围裁剪 (留给后续 PR):
+  - `upb` / `upb2` 在 PR-A 范围内的 `kernel/src/perf/uprobe.rs` 仍
+    `Unsupported` (因 `ProcessData::uprobe_manager` / `_point_list` 字段
+    + `AddrSpace::memoryset` accessor 未引入). PR-D 代码不动这两个
+    程序的源, 等 PR-A-followup 接通后这两个程序自动可用.
+  - rootfs 安装路径 (把 `target/<musl-target>/release/<prog>` 拷入
+    `/usr/bin/`) 由 PR-D-followup 或 rootfs PR 处理, 不挡 PR-D code review.
+- 验证状态 (host = aarch64-apple-darwin, 无 bpf-linker / musl-cc /
+  磁盘紧张):
+  - `cargo metadata --no-deps` (仓根 workspace, 7 program 已正确 exclude) ✅
+  - `cargo metadata --manifest-path os/StarryOS/user/ebpf/<p>/Cargo.toml`
+    (7/7 program 子 workspace) ✅
+  - `cargo fmt --all -- --check` 每个 program workspace ✅ 7/7
+    (源 3 个 program 在 src 中存在 fmt 偏差: `kret/kret-ebpf/src/main.rs`,
+    `syscall_ebpf/syscall_ebpf-ebpf/src/main.rs`, `upb/upb/src/main.rs`,
+    在本 PR 内顺手按 rustfmt 规范化, 不改语义.)
+  - `cargo check -p axbuild` ✅ (xtask 新子命令编译通过)
+  - `cargo test -p axbuild starry::user_ebpf` ✅ 5/5 (arch 映射 +
+    program 列表 + `--all`/`--program` 互斥参数解析全部覆盖)
+  - `cargo xtask starry user-ebpf --help` / `list` / `build --help` ✅
+    (subcommand 路由 + 全部参数文档显示正常)
+  - `cargo check` (async_test, host target aarch64-apple-darwin) ✅
+- ⚠️ **环境受限验证 (待 CI)**:
+  - 三/四架构 `cargo build --release --target *-unknown-linux-musl`
+    需要 `*-linux-musl-gcc` cross 工具链 + rust `*-unknown-linux-musl`
+    target component + `cargo install bpf-linker`. 本机 macOS 都缺,
+    CI Linux runner 镜像 `ghcr.io/rcore-os/tgoskits-container:latest`
+    应当具备 (与 PR-A `printf-compat` / PR-B `lwprintf-rs` 同类环境
+    限制).
+  - qemu starryos 内 `./kret __aarch64_sys_getpid` / `./rawtp` 烟测
+    (PR-D 完成判据): 需要 PR-A 合入 dev + rootfs 把上述产物安装到
+    `/usr/bin/`. 当前 stacking parent 仍是 PR-A 分支, 这一步留给
+    PR-A 合入后的 rebase + CI 联跑.
+- 下一步:
+  1. 用户审阅后推送 `feat/starry-ebpf-userspace` 到 `origin`
+     (当前未推送, 与 PR-A/B/C 保持一致节奏).
+  2. PR-A 合入 dev 后 rebase, 删除 stacking parent.
+  3. 与 rootfs 团队对齐安装路径 (`/usr/bin/<prog>` 还是
+     `/opt/ebpf/<prog>`), 后续 PR 处理.
+- Task 状态: #8 in_progress (代码 + xtask + 文档 ready, 待 CI 跑通
+  qemu 烟测后转 completed).
+
+---
+
 ## 2026-05-21 — Task #1 抓取上游分支
 
 - author: claude (代 LorenzLorentz)

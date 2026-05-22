@@ -158,20 +158,24 @@ Task #2 产出。审计 `Starry-OS/StarryOS:ebpf-kmod` 三个 commit 与
 
 ### M. user/musl/ (eBPF 用户程序, 7 个独立 crate)
 
+**落点已决** (Task #8 / PR-D `feat/starry-ebpf-userspace`,
+workflow §5.4): **`os/StarryOS/user/ebpf/`** (非 `test-suit/starryos/ebpf/`)。
+原因: 每个程序自带 `[workspace]` + aya git deps + bpfel cross 流水线,
+不匹配 test-suit 现有 `c`/`sh`/`python`/`grouped` pipeline; 走仓根
+`[workspace] exclude` 摘出 + `cargo xtask starry user-ebpf build`
+驱动 (详见 journal 2026-05-23 entry)。
+
 | 源目录 | 大致行数 | tgoskits 对应 | 状态 | 归属 PR | 备注 |
 |---|---|---|---|---|---|
-| `user/musl/async_test/` | ~100 | TBD (`os/StarryOS/user/musl/` ?) | ❌ | PR-D | 最简单的 epoll 测试 |
-| `user/musl/kret/` | ~1100 | TBD | ❌ | PR-D | kretprobe 综合测试, 三件套 (-common/-ebpf/-userspace) |
-| `user/musl/mytrace/` | ~1100 | TBD | ❌ | PR-D | 同上, 自定义 tracepoint |
-| `user/musl/rawtp/` | ~1100 | TBD | ❌ | PR-D | raw tracepoint |
-| `user/musl/syscall_ebpf/` | ~1100 | TBD | ❌ | PR-D | syscall tracing |
-| `user/musl/upb/` | ~1100 | TBD | ❌ | PR-D | uprobe |
-| `user/musl/upb2/` | ~1100 | TBD | ❌ | PR-D | uprobe 进阶 |
-| `user/musl/Makefile` | +42 | n/a | ⛔ | — | 翻译进 xtask |
-| `user/musl/.cargo/config.toml` | +13 | `os/StarryOS/user/musl/.cargo/config.toml` 或 workspace 级 | ❌ | PR-D | cross 编译 target 配置 |
-
-> **注**: Task #8 (PR-D) 开工前要先决定 `user/musl/` 的 canonical 位置
-> (见 workflow §5.4)。本表暂用 `TBD` 占位。
+| `user/musl/async_test/` | ~100 | `os/StarryOS/user/ebpf/async_test/` | ✅ | PR-D | 单 crate, 无 aya, 仅 tokio + `core::arch::breakpoint` smoke |
+| `user/musl/kret/` | ~1100 | `os/StarryOS/user/ebpf/kret/` | ✅ | PR-D | kretprobe, 三件套 (kret / kret-common / kret-ebpf) |
+| `user/musl/mytrace/` | ~1100 | `os/StarryOS/user/ebpf/mytrace/` | ✅ | PR-D | tracepoint sys_enter_openat |
+| `user/musl/rawtp/` | ~1100 | `os/StarryOS/user/ebpf/rawtp/` | ✅ | PR-D | raw tracepoint sys_clone |
+| `user/musl/syscall_ebpf/` | ~1100 | `os/StarryOS/user/ebpf/syscall_ebpf/` | ✅ | PR-D | kprobe + HashMap syscall 计数 |
+| `user/musl/upb/` | ~1100 | `os/StarryOS/user/ebpf/upb/` | ✅ | PR-D | uprobe (用户函数); 内核侧待 perf/uprobe 解锁 |
+| `user/musl/upb2/` | ~1100 | `os/StarryOS/user/ebpf/upb2/` | ✅ | PR-D | uprobe 进阶 (musl libc mkdir); 同上 |
+| `user/musl/Makefile` | +42 | n/a | ⛔ | — | 翻译进 `cargo xtask starry user-ebpf build` (workflow §5.3) |
+| `user/musl/.cargo/config.toml` | +13 | `os/StarryOS/user/ebpf/.cargo/config.toml` | ✅ | PR-D | 字节级移植, 各 musl target 的 linker + `-crt-static` |
 
 ---
 
