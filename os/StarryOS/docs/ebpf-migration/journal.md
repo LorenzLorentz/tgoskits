@@ -236,3 +236,90 @@
   review.
 
 ---
+
+## 2026-05-22 — Task #7 PR-C: kmod 示例 (hello + kebpf) 移植落地
+
+- author: claude (代 LorenzLorentz)
+- 分支: `feat/starry-kmod-examples` @ `2a9a26187` (起点 `e8eb1f54e`,
+  即 `feat/starry-lkm` HEAD, 因 PR-B 仍未合入 `dev` 且 PR-B 已 rebase 到
+  PR-A, 选 PR-B 当 stacking base 同时拿到 PR-A 的 eBPF runtime 与 PR-B
+  的 LKM 加载器).
+- 单 commit, 9 文件 / +280 净行 (与 `diff-audit.md §L` 估算一致):
+  - `os/StarryOS/modules/hello/Cargo.toml` + `src/lib.rs`: 字节级 1:1
+    照搬源仓 `modules/hello`, 只把 `axfeat` → `ax-feat`. `kmod` 包别名
+    `kmod-tools` 与 `write_char` C-ABI 符号在 PR-B 已对齐.
+  - `os/StarryOS/modules/kebpf/Cargo.toml` + `src/{lib.rs,map.rs,prog/mod.rs}`:
+    移植源仓 `modules/kebpf` 四件套. import 重写为 tgoskits 命名
+    (`axhal/axalloc/axerrno/axio/axlog` → `ax_*`, `starry_kernel::bpf::tansform`
+    → `starry_kernel::ebpf::transform`).
+  - `os/StarryOS/kernel/src/lib.rs`: `mod ebpf|file|mm|perf` 升级为
+    `pub mod`. 源仓本来就是 `pub mod` 形态, PR-A / PR-B 当时尚未引入
+    out-of-tree consumer 所以保持 private; PR-C 是首个 consumer, 此处
+    顺手对齐 (1 commit hunk, 4 行 visibility 改动, 不引入新代码).
+  - `Cargo.toml` (root): `workspace.members` 追加
+    `os/StarryOS/modules/hello`, `os/StarryOS/modules/kebpf`.
+- 关键决策:
+  - **kebpf 不调用 `register_syscall_handler`**: 源仓通过自实现的
+    `SyscallHandler` trait + `RwLock<BTreeMap<Sysno, &dyn SyscallHandler>>`
+    把 `Sysno::bpf` 动态指给 kebpf 模块的 `Handler::handle`. tgoskits
+    没有这套动态注册表 (`syscall/mod.rs` 是 match-tree 静态分派, 见
+    PR-A 接通时已直接挂 `crate::ebpf::sys_bpf`). 为不引入跨 PR 的 syscall
+    框架改造, kebpf 的 `Handler`/`SyscallHandler`/`register_syscall_handler`
+    直接删除. 保留 `sys_bpf` / `bpf()` 作 LKM 直接驱动 `kbpf-basic` 的
+    教学示范, `init_fn`/`exit_fn` 落到 hello/goodbye 日志 (与源仓
+    insmod/rmmod 时用户可见行为相同).
+  - **不引入 `[patch.crates-io]`**: 模块 crate 用 `kmod = { version =
+    "0.2", package = "kmod-tools" }` / `kbpf-basic = "0.5"` inline 声明,
+    与 PR-B 中 `starry-kernel` 的写法一致 (这两个 crate 在 tgoskits
+    workspace.dependencies 内不存在, 不能 `workspace = true`).
+  - **不更新 `scripts/test/clippy_crates.csv`**: 文件不存在.
+    `cargo xtask clippy` 直接从 `cargo metadata` 拿 workspace_members,
+    本 PR 通过加入 `workspace.members` 已自动进入 clippy 扫描范围
+    (workflow §2.3 提到的 csv 是历史描述, tgoskits 当前不用).
+  - **`PollSetWrapper` 上行转换**: 源仓 `map.rs` 中
+    `kbpf_basic::map::bpf_map_create::<EbpfKernelAuxiliary, PerCpuImpl>
+    (map_meta, Some(poll_ready.clone()))` 隐式依赖 `Arc<PollSetWrapper>`
+    强制 coerce 到 `Arc<dyn PollWaker>`. PR-A 的内核侧 `create_map` 已
+    显式上行 `let poll_ready_dyn: Arc<dyn PollWaker> = poll_ready.clone();`.
+    PR-C kebpf::map 跟随 PR-A 风格, 显式上行避免歧义.
+- 范围裁剪 (留给后续 PR):
+  - `modules/kebpf` 不再独立提供 `bpf(2)` 入口: tgoskits 内核已内置.
+    后续若需要 "LKM 替换内置 bpf 路由" 的能力, 需先单独 PR 把 syscall
+    分派改成可注册式 (跨子系统的设计变更, 与 PR-C scope 不符).
+  - 源仓 `modules/kmod-linker.ld` (47 行) 与 `modules/kmod.mk` (29 行)
+    在 PR-B 已分别替换为 `os/StarryOS/scripts/kmod-linker.ld` 与
+    `cargo xtask starry kmod build`, PR-C 不重复.
+  - 源仓 `docs/eBPF for Starry.md` (232 行) 与 `docs/null_blk.md`
+    (128 行) 改写到 `os/StarryOS/docs/{ebpf-howto,lkm-null-blk}.md`
+    属 PR-A / PR-B 后续文档任务, PR-C 不顺手.
+- 验证状态:
+  - `cargo fmt --package hello --package kebpf -- --check` ✅
+  - `cargo fmt --package starry-kernel -- --check` ✅ (验证 lib.rs
+    visibility 改动后 starry-kernel 仍 fmt 干净)
+  - `cargo metadata --no-deps` ✅: `hello`/`kebpf` 都以 workspace
+    member 解析, 路径正确.
+  - `cargo check -p axbuild` ✅ (PR-B 的 xtask kmod 子命令编译通过)
+  - `cargo xtask starry kmod build --help` ✅: subcommand 路由与
+    --module/--all 参数完整, 加入 modules 后 xtask 没有破坏.
+  - `cargo xtask starry kmod build --module os/StarryOS/modules/hello
+    --arch x86_64` ❌ blocked: target-dir 编译时本机系统盘满
+    (228Gi / 240Mi avail), `kbindings` rlib 写入失败. 与代码无关的
+    环境问题. 与 PR-B 的 `lwprintf-rs gcc -print-sysroot` 类似, 都需要
+    CI Linux runner 上跑.
+  - 三架构 build / clippy / sync-lint / qemu insmod 烟测均待 CI.
+- ⚠️ **环境依赖 (非代码 blocker)**:
+  - 本机磁盘满, 后续验证只能上 CI.
+  - 上游 `printf-compat` patch (PR-A 引入) 仍然有效, 不需 PR-C 操心.
+- 下一步:
+  1. PR-C 推到 origin (用户决定时机), 与 PR-B 一起进 CI Linux runner.
+  2. 待 PR-B 合入 dev 后, PR-C rebase 到新 dev (不再 stacking 于
+     `feat/starry-lkm`).
+  3. qemu 内 `insmod /lib/modules/hello.ko` + `dmesg | grep Hello` 是
+    Task #7 完成判据, 需要 PR-B 合入 + rootfs 把 `target/x86_64/kmod/
+    hello.ko` 安装到 `/lib/modules/` 后才能跑. 安装路径 / rootfs
+    打包 hook 由后续 PR-C-followup 或 PR-B-followup 决定, 不挡 PR-C
+    review.
+- Task 状态: #7 in_progress (代码 + xtask 路由 ready, 待 CI 环境
+  跑通后转 completed).
+
+---
