@@ -115,9 +115,9 @@ fn musl_target_for_arch(arch: &str) -> anyhow::Result<&'static str> {
         "aarch64" => "aarch64-unknown-linux-musl",
         "riscv64" | "riscv64gc" => "riscv64gc-unknown-linux-musl",
         "loongarch64" => "loongarch64-unknown-linux-musl",
-        other => bail!(
-            "unsupported arch `{other}`; supported: x86_64, aarch64, riscv64, loongarch64"
-        ),
+        other => {
+            bail!("unsupported arch `{other}`; supported: x86_64, aarch64, riscv64, loongarch64")
+        }
     })
 }
 
