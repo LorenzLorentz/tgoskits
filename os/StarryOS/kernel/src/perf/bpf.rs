@@ -1,18 +1,21 @@
 //! Software perf event with BPF program attachment + ringbuf output.
 //!
-//! Ported from `Starry-OS/StarryOS:ebpf-kmod` (`kernel/src/perf/bpf.rs`).
-//! The user-visible ringbuf is created by `BpfPerfEvent::do_mmap`; tgoskits'
-//! `FileLike` does not expose a `custom_mmap()` hook on perf-event fds at
-//! the moment (#805 + #673 do not introduce one), so the mmap pathway is
-//! reachable only through internal callers for now — a follow-up PR will
-//! wire it into `mmap(2)`. The rest of the event lifecycle (enable /
-//! disable / set_bpf_prog / write_event) matches the upstream behaviour.
+//! The user-visible ringbuf is created on the first `mmap(perf_fd, ...)`
+//! call: `BpfPerfEventWrapper::device_mmap` allocates `1 + 2^N` physically
+//! contiguous 4 K pages (header page + power-of-two-page data ring) and
+//! hands the kernel virtual address to `BpfPerfEvent::do_mmap`, which
+//! initializes `perf_event_mmap_page` in page 0. `sys_mmap` then maps the
+//! same physical range into the caller's address space, so user reads of
+//! `data_head` / `data_tail` and kernel writes via `bpf_perf_event_output`
+//! share one buffer.
 
 use alloc::sync::Arc;
 use core::{any::Any, fmt::Debug};
 
+use ax_alloc::GlobalPage;
 use ax_errno::{AxError, AxResult};
-use ax_memory_addr::PhysAddr;
+use ax_hal::mem::virt_to_phys;
+use ax_memory_addr::{PAGE_SIZE_4K, PhysAddr};
 use axpoll::{IoEvents, PollSet, Pollable};
 use kbpf_basic::{
     linux_bpf::perf_event_sample_format,
@@ -28,13 +31,20 @@ use crate::{
 };
 
 /// Wraps `kbpf_basic::perf::bpf::BpfPerfEvent` with kernel state: a poll
-/// set so readers can wait for new records, and the backing
-/// `(PhysAddr, page_count)` produced by `do_mmap` (Some after the user
-/// `mmap`s the ringbuf; None before).
+/// set so readers can wait for new records, and the backing pages produced
+/// by `device_mmap` (Some after the user `mmap`s the ringbuf; None before).
+///
+/// Field order is load-bearing: `inner` holds a raw pointer into the page
+/// buffer for the lifetime of the `RingPage`; `pages` owns the allocation.
+/// Rust drops fields in declaration order, so `inner` (the borrower) goes
+/// before `pages` (the owner), and the buffer is freed only after the last
+/// access through `inner` is gone.
 pub struct BpfPerfEventWrapper {
     inner: BpfPerfEvent,
     poll_ready: PollSet,
-    phys_addr: Option<(PhysAddr, usize)>,
+    /// MUST be declared after `inner`. Holds the contiguous pages backing
+    /// the ringbuf; dropping it returns them to the global page allocator.
+    pages: Option<GlobalPage>,
 }
 
 impl BpfPerfEventWrapper {
@@ -43,16 +53,15 @@ impl BpfPerfEventWrapper {
         Self {
             inner,
             poll_ready: PollSet::new(),
-            phys_addr: None,
+            pages: None,
         }
     }
 
     /// Write a record into the ringbuf and wake any readers. Pre-mmap
-    /// calls are accepted as no-ops (matching the source behaviour).
+    /// calls are accepted as no-ops: `kbpf_basic::RingPage` is in its
+    /// `empty()` state and writing through its null `ptr` would be UB.
     pub fn write_event(&mut self, data: &[u8]) -> AxResult<()> {
-        if self.phys_addr.is_none() {
-            // Ringbuf not yet mapped by userland; drop the sample silently
-            // — Linux behavior on EINVAL would alarm libbpf-style readers.
+        if self.pages.is_none() {
             return Ok(());
         }
         self.inner.write_event(data).into_ax_result()?;
@@ -83,15 +92,32 @@ impl PerfEventOps for BpfPerfEventWrapper {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
-}
 
-impl Drop for BpfPerfEventWrapper {
-    fn drop(&mut self) {
-        // The mmap'd ringbuf pages, if any, were allocated via the global
-        // page allocator in the (not yet wired) mmap path; once that path
-        // lands, this drop will need to call `frame_dealloc` for each. For
-        // now the field stays `None`, so this is effectively a no-op.
-        let _ = self.phys_addr.take();
+    fn device_mmap(&mut self, len: usize) -> AxResult<PhysAddr> {
+        if self.pages.is_some() {
+            // Linux allows only one mmap per perf event fd; a second call
+            // would orphan the first user mapping if we swapped the pages.
+            return Err(AxError::ResourceBusy);
+        }
+        // libbpf requires `(1 + 2^N) * PAGE_SIZE` so the data region is a
+        // power of two pages; `RingPage::init` enforces ≥ 2 pages total and
+        // 4 K alignment. Reject anything that would trip those asserts.
+        if len == 0 || len % PAGE_SIZE_4K != 0 {
+            return Err(AxError::InvalidInput);
+        }
+        let num_pages = len / PAGE_SIZE_4K;
+        if num_pages < 2 || !(num_pages - 1).is_power_of_two() {
+            return Err(AxError::InvalidInput);
+        }
+        let mut pages = GlobalPage::alloc_contiguous(num_pages, PAGE_SIZE_4K)?;
+        pages.zero();
+        let kvirt = pages.start_vaddr();
+        let paddr = virt_to_phys(kvirt);
+        self.inner
+            .do_mmap(kvirt.as_usize(), len, 0)
+            .map_err(|_| AxError::InvalidInput)?;
+        self.pages = Some(pages);
+        Ok(paddr)
     }
 }
 
