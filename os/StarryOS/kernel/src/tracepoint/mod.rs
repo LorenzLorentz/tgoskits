@@ -1,5 +1,6 @@
 //! See Linux Documentation for details: <https://docs.kernel.org/trace/ftrace.html>
 mod control;
+mod sched;
 mod trace;
 mod trace_pipe;
 
@@ -15,6 +16,8 @@ use ax_task::current;
 use axfs_ng_vfs::NodePermission;
 use axpoll::PollSet;
 use ktracepoint::*;
+
+pub use sched::{trace_sched_process_exit, trace_sched_process_fork};
 
 use crate::{
     pseudofs::{DirMaker, DirMapping, SeqObject, SimpleDir, SimpleFs, SpecialFsFile},

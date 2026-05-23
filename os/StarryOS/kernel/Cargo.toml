@@ -47,6 +47,7 @@ ax-feat = { workspace = true, features = [
 
     "multitask",
     "task-ext",
+    "tracepoint-hooks",
     "sched-rr",
 
     "rtc",
@@ -57,6 +58,7 @@ ax-feat = { workspace = true, features = [
 
 ax-alloc = { workspace = true }
 ax-config.workspace = true
+ax-crate-interface.workspace = true
 ax-display.workspace = true
 ax-fs = { version = "0.5.15", path = "../../arceos/modules/axfs-ng", package = "ax-fs-ng" }
 ax-cpu = { workspace = true, features = ["fp-simd"] }

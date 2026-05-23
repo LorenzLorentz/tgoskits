@@ -367,6 +367,10 @@ impl CloneArgs {
             );
         }
 
+        // Fire before any potential vfork-wait so observers see the fork edge
+        // even when the parent blocks below.
+        crate::tracepoint::trace_sched_process_fork(curr.id().as_u64(), tid as u64);
+
         // Block the parent until the child exec's or exits.
         if needs_vfork_block {
             new_proc_data.wait_vfork_done();
