@@ -22,8 +22,10 @@ use starry_kernel::{
     file::add_file_like,
 };
 
+use super::bpf_err;
+
 pub fn bpf_map_create(attr: &bpf_attr) -> AxResult<isize> {
-    let map_meta = BpfMapMeta::try_from(attr)?;
+    let map_meta = BpfMapMeta::try_from(attr).map_err(bpf_err)?;
     ax_log::debug!("The map attr is {:#?}", map_meta);
 
     let poll_ready = Arc::new(PollSetWrapper::new());
@@ -32,7 +34,8 @@ pub fn bpf_map_create(attr: &bpf_attr) -> AxResult<isize> {
     let unified_map = kbpf_basic::map::bpf_map_create::<EbpfKernelAuxiliary, PerCpuImpl>(
         map_meta,
         Some(poll_ready_dyn),
-    )?;
+    )
+    .map_err(bpf_err)?;
 
     let file = Arc::new(BpfMap::new(unified_map, poll_ready));
     let fd = add_file_like(file, false).map(|fd| fd as _);

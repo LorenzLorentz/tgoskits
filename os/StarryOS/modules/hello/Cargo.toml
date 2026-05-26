@@ -12,7 +12,7 @@ crate-type = ["rlib"]
 [dependencies]
 ax-feat.workspace = true
 starry-kernel.workspace = true
-kmod = { version = "0.2", package = "kmod-tools" }
+kmod-tools = "0.2"
 
 [features]
 default = []

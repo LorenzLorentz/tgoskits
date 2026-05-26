@@ -17,7 +17,7 @@ ax-hal.workspace = true
 ax-io.workspace = true
 starry-kernel.workspace = true
 
-kmod = { version = "0.2", package = "kmod-tools" }
+kmod-tools = "0.2"
 kbpf-basic = "0.5"
 
 [features]

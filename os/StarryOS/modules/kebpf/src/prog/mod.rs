@@ -23,7 +23,8 @@ use starry_kernel::{
 ///
 /// See https://ebpf-docs.dylanreimerink.nl/linux/syscall/BPF_PROG_LOAD/
 pub fn bpf_prog_load(attr: &bpf_attr) -> AxResult<isize> {
-    let mut args = BpfProgMeta::try_from_bpf_attr::<EbpfKernelAuxiliary>(attr)?;
+    let mut args =
+        BpfProgMeta::try_from_bpf_attr::<EbpfKernelAuxiliary>(attr).map_err(crate::bpf_err)?;
     ax_log::warn!("bpf_prog_load: {:#?}", args);
     let _log_info = BpfProgVerifierInfo::from(attr);
     let prog_insn = args.take_insns().unwrap();
