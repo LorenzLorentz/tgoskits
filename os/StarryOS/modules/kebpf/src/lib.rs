@@ -31,8 +31,19 @@ use kbpf_basic::{
     map::{BpfMapGetNextKeyArg, BpfMapUpdateArg},
     raw_tracepoint::BpfRawTracePointArg,
 };
-use kmod::{exit_fn, init_fn, module};
+use kmod_tools::{exit_fn, init_fn, module};
 use starry_kernel::{ebpf::transform::EbpfKernelAuxiliary, mm::VmBytes};
+
+/// Convert `kbpf_basic::BpfError` (`axerrno::LinuxError`) to `ax_errno::AxError`.
+///
+/// `kbpf-basic` depends on `axerrno` (crates.io v0.2.x) while this
+/// workspace uses `ax-errno` (local v0.5.x). The two `LinuxError` types
+/// are distinct, so we convert through the shared `i32` error code.
+fn bpf_err(e: kbpf_basic::BpfError) -> AxError {
+    use ax_errno::LinuxError;
+    let linux_err = LinuxError::try_from(e.code()).unwrap_or(LinuxError::EIO);
+    linux_err.into()
+}
 
 mod map;
 mod prog;
@@ -60,32 +71,38 @@ pub fn bpf(cmd: bpf_cmd, attr: &bpf_attr) -> AxResult<isize> {
         // Map related commands
         bpf_cmd::BPF_MAP_CREATE => map::bpf_map_create(attr),
         bpf_cmd::BPF_MAP_UPDATE_ELEM => {
-            kbpf_basic::map::bpf_map_update_elem::<EbpfKernelAuxiliary>(update_arg)?;
+            kbpf_basic::map::bpf_map_update_elem::<EbpfKernelAuxiliary>(update_arg)
+                .map_err(bpf_err)?;
             Ok(0)
         }
         bpf_cmd::BPF_MAP_LOOKUP_ELEM => {
-            kbpf_basic::map::bpf_lookup_elem::<EbpfKernelAuxiliary>(update_arg)?;
+            kbpf_basic::map::bpf_lookup_elem::<EbpfKernelAuxiliary>(update_arg).map_err(bpf_err)?;
             Ok(0)
         }
         bpf_cmd::BPF_MAP_GET_NEXT_KEY => {
             let update_arg = BpfMapGetNextKeyArg::from(attr);
-            kbpf_basic::map::bpf_map_get_next_key::<EbpfKernelAuxiliary>(update_arg)?;
+            kbpf_basic::map::bpf_map_get_next_key::<EbpfKernelAuxiliary>(update_arg)
+                .map_err(bpf_err)?;
             Ok(0)
         }
         bpf_cmd::BPF_MAP_DELETE_ELEM => {
-            kbpf_basic::map::bpf_map_delete_elem::<EbpfKernelAuxiliary>(update_arg)?;
+            kbpf_basic::map::bpf_map_delete_elem::<EbpfKernelAuxiliary>(update_arg)
+                .map_err(bpf_err)?;
             Ok(0)
         }
         bpf_cmd::BPF_MAP_LOOKUP_AND_DELETE_ELEM => {
-            kbpf_basic::map::bpf_map_lookup_and_delete_elem::<EbpfKernelAuxiliary>(update_arg)?;
+            kbpf_basic::map::bpf_map_lookup_and_delete_elem::<EbpfKernelAuxiliary>(update_arg)
+                .map_err(bpf_err)?;
             Ok(0)
         }
         bpf_cmd::BPF_MAP_LOOKUP_BATCH => {
-            kbpf_basic::map::bpf_map_lookup_batch::<EbpfKernelAuxiliary>(update_arg)?;
+            kbpf_basic::map::bpf_map_lookup_batch::<EbpfKernelAuxiliary>(update_arg)
+                .map_err(bpf_err)?;
             Ok(0)
         }
         bpf_cmd::BPF_MAP_FREEZE => {
-            kbpf_basic::map::bpf_map_freeze::<EbpfKernelAuxiliary>(update_arg.map_fd)?;
+            kbpf_basic::map::bpf_map_freeze::<EbpfKernelAuxiliary>(update_arg.map_fd)
+                .map_err(bpf_err)?;
             Ok(0)
         }
         // Attaches the program to the given tracepoint.
@@ -102,7 +119,8 @@ pub fn bpf(cmd: bpf_cmd, attr: &bpf_attr) -> AxResult<isize> {
             Err(AxError::Unsupported)
         }
         ty => {
-            unimplemented!("bpf cmd: [{:?}] not implemented", ty)
+            ax_log::warn!("bpf cmd: [{:?}] not implemented", ty);
+            Err(AxError::Unsupported)
         }
     }
 }
