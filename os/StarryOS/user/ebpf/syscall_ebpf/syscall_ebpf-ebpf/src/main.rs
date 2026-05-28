@@ -2,12 +2,17 @@
 #![no_main]
 
 use aya_ebpf::{
-    helpers::bpf_ktime_get_ns,
     macros::{kprobe, map},
     maps::HashMap,
     programs::ProbeContext,
 };
-use aya_log_ebpf::info;
+
+// D1: aya_log uses perf-ringbuf which StarryOS's BpfPerfEvent does not yet
+// implement (PERF-P0-1 in docs/ebpf-followup/perf-ringbuf-audit.md). Aya's
+// logger initialization creates a ringbuf map fd, fails to mmap it, then
+// drops the underlying Bpf view — closing the fd before the kernel-side
+// preprocessor can resolve it. Removing info! lets the BPF program load
+// successfully and feed counts via HashMap iter on the userspace side.
 
 #[kprobe]
 pub fn syscall_ebpf(ctx: ProbeContext) -> u32 {
@@ -27,8 +32,6 @@ fn try_syscall_ebpf(ctx: ProbeContext) -> Result<u32, u32> {
                 SYSCALL_LIST.insert(&(syscall_num as u32), &1, 0).unwrap();
             }
         }
-        let time = unsafe { bpf_ktime_get_ns() };
-        info!(&ctx, "[{}] invoke syscall {}", time, syscall_num);
     }
     Ok(0)
 }
