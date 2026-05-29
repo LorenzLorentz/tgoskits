@@ -39,20 +39,29 @@
 2. 关闭程序后再起一次, count 重置, 不残留 (kprobe Drop unregister 路径正确, 防 leak).
 3. 与 Linux 对照: 同样代码在 host Linux 上跑 (用 mainline aya), count 同范围内.
 
-### 2.2 D3: profile_kprobe (与 D1 同类, 不同采集面)
+### 2.2 D3: profile (syscall 频次画像, kprobe + HashMap)
 
-**功能**: 在 `__schedule` (调度入口) 注 kprobe; 用 `bpf_get_smp_processor_id` 拿当前 CPU + `PT_REGS_IP(regs)` 拿 caller PC; map[caller_pc]++.
-**用户态**: 每秒打印 top-K caller. (典型 perf-record 简化版.)
+> **实现说明 (2026-05-29, 实跑后定稿)**: 原拟"`__schedule` 注 kprobe + `bpf_get_smp_processor_id` + `PT_REGS_IP` 取 caller PC"的方案**在本内核不可行**, 已改为 syscall 频次直方图. 改动原因 (对代码核实):
+> 1. `kbpf_basic::helper::init_helper_functions` **没注册** `bpf_get_smp_processor_id`(8) / `bpf_get_current_pid_tgid`(14); 调用未注册 helper 会让 rbpf VM 报错。可用的只有 map 一族 + `bpf_ktime_get_ns` + `bpf_perf_event_output` + **`bpf_probe_read`(4)** + `trace_printf` + ringbuf。
+> 2. kprobe 入口处 `PT_REGS_IP` 恒等于探测点地址本身 (int3 落点), 当 key 只会得到**单一桶**, 直接违反下方"≥3 distinct"判据 —— 拿不到真正的 caller PC (那需要读栈上返回地址, 跨架构脆弱)。
+>
+> 故采集面改为"整条 syscall 分发路径的 syscall 号频次", 仍是 **kprobe + HashMap** (与 D1 同色, 无 ringbuf 依赖), 但语义是 perf-top-for-syscalls, 区别于 D1 的"单 syscall 精确计数"。
 
-**为何稳**: 仍然 kprobe + HashMap 链路, 与 D1 同色. 没有 ringbuf 依赖.
+**功能**: 在内核中央分发器 `starry_kernel::syscall::handle_syscall(uctx: &mut UserContext)` 注 kprobe; BPF prog 取 arg0(=`&UserContext`), 用 `bpf_probe_read` 读它的前 8 字节 (x86_64 上即 saved `rax` == syscall 号, 是 `TrapFrame` 首字段, 偏移 0), `HashMap<u32,u64>[sysno]++`。
+**用户态**: loader attach 后等信号, SIGTERM/SIGINT 时排空 map、按计数降序打印直方图 + `PROFILE_END total=.. distinct=.. top1_*` 汇总行。
 
-**新增 user crate**: `user/ebpf/profile/` (kret 的兄弟).
-- `profile-ebpf/src/main.rs`: 一个 `#[kprobe]` fn, 读 `PT_REGS_IP`, 写 `HashMap<u64, u32>`.
-- `profile/src/main.rs`: aya loader, 把它 attach 到用户传入的 symbol (例如 `__sched_text_start` / `default_yield`).
+**为何稳**: 仍然 kprobe + HashMap 链路, 与 D1 同色, 无 ringbuf 依赖; 只用已注册 helper (`bpf_probe_read` + map)。syscall 号取值走偏移 0 (无需追结构布局)。
 
-**完成判据**:
-1. 启动后, qemu 里跑一个 busy loop (`yes > /dev/null & sleep 5; kill %1`), 30s 内能看到 sched 入口的 caller PC 分布.
-2. `unregister_kprobe` 验证 (Ctrl+C 退出 loader, 内核 trap 应该归位; 反复 attach/detach 10 次 dmesg 无异常).
+**新增 user crate**: `user/ebpf/profile/` (syscall_ebpf / sched_trace 的兄弟, 3-crate aya workspace)。
+- `profile-ebpf/src/main.rs`: `#[kprobe] handle_syscall` → `bpf_probe_read::<u64>(arg0)` → `HashMap<u32,u64>`。无 loop (verifier 友好)。
+- `profile/src/main.rs`: 纯 sync aya loader (无 tokio); 把它 attach 到用户传入的 mangled symbol (`grep handle_syscall /proc/kallsyms`)。
+- `profile-common/src/lib.rs`: 记 `SYSNO_OFFSET_IN_USERCONTEXT=0` 的 x86_64 ABI 假设。
+
+**内核侧前置 (实跑中发现并修)**: `handle_syscall` 必须 `#[inline(never)]`。release 下 LLVM 把它 inline 进唯一调用点 (`task/user.rs` run loop), 同时仍发独立符号 (kallsyms 命中) —— int3 落在从不执行的离线副本上, 探针**永不触发** (首跑 `total=0`)。与 commit `1f6579f41` 修 `sys_getpid` 的 gap #3 同型, 修在 `kernel/src/syscall/mod.rs`。
+
+**完成判据** (已在 qemu x86_64 实测通过):
+1. attach 后跑 syscall 重载 (`dd if=/dev/zero of=/dev/null bs=1 count=20000` 造 2 万 read+2 万 write), 退出时直方图 `total≥1000`(非 `>0`)、`distinct≥3`、top-1 占比 `≥20%`。实测 `total=40310 distinct=33 top1=write(1) 49.6%`。
+2. `unregister_kprobe` 验证: 连续 attach/detach 3 次 (每次 detach 经 `write_kernel_text` 改内核文本), 无 panic、样本数稳定 → 卸载路径不泄漏。
 
 ### 2.3 D2: sched_trace (依赖 P0 全通)
 
@@ -176,11 +185,14 @@ echo "PASS syscall_count: $SYM count=$COUNT"
 - 关掉 BPF prog 后 re-run, 不允许 count 复用旧值.
 - 必须断言 `[ "$COUNT" -ge 90 ]` 而非 `[ "$COUNT" -gt 0 ]`.
 
-### 4.2 D3 profile_kprobe
+### 4.2 D3 profile
 
-同上骨架, 但断言:
-- top-1 caller 的占比 ≥ 20% (busy-loop 期间应有热点)
-- map 至少有 ≥ 3 个不同的 caller (反向证伪 "永远只 hit 1 个 PC"=kprobe 装错地方)
+实测脚本 `test-suit/starryos/ebpf/qemu-smp1/profile/sh/profile.sh` (反 fallback):
+- `SYM=$(grep -m1 handle_syscall /proc/kallsyms | awk '{print $3}')` 取 mangled 符号; 找不到直接 FAIL。
+- attach 后跑 `dd if=/dev/zero of=/dev/null bs=1 count=20000` 制造主导热点 (write)。
+- SIGTERM 让 loader 排空 map、打印 `PROFILE_END total=.. distinct=.. top1_count=..`。
+- 断言 (整数判, 不依赖浮点): `total≥1000` (非 `>0`)、`distinct≥3` (反证 "永远只 hit 1 个 key"=kprobe 装错地方)、`top1_count*5≥total` (即 top-1 ≥ 20%, 反证扁平/乱数据)。
+- 卸载验证: 再 attach/detach 3 轮, 每轮样本数仍 ≥1000 → 探针未泄漏、内核文本归位。
 
 ### 4.3 D2 sched_trace
 
@@ -230,8 +242,9 @@ echo "PASS sched_trace: $N records"
 
 1. **kbpf-basic verifier 限制**: 当前 rbpf 0.4 不做真验证, 错误程序可能直接死循环. demo 程序的 loop 必须能终止 (BPF verifier 在 Linux 上会拒). 本 demo 三个程序都不含 loop.
 2. **mangled symbol name**: `sys_getpid` 在 Rust 内核里实际符号可能是 `_ZN12starry_kernel...`. 用户必须用 `cat /proc/kallsyms | grep sys_getpid` 取真名 (`syscall_ebpf` loader 文档已经说了).
-3. **PMU 路径**: D3 想要"真正的 sample-based profile" (PERF_TYPE_HARDWARE) 不可用; 当前仅是 kprobe trigger-based, 与 perf-record 不同色. 文档 README 要写明.
-4. **多 CPU 下 PerCpuArray 一致性**: aya `mytrace` 用 `PerCpuArray`; 跨 CPU 取 0 号 slot 时, 在 SMP 下记录 mix. demo 程序若有此需求, 必须用 `bpf_get_smp_processor_id` + per-cpu key.
+3. **profile 不是 sample-based**: D3 既非 `PERF_TYPE_HARDWARE` 采样, 也非"caller PC 直方图" (原设计) —— 见 §2.2 实现说明: `bpf_get_smp_processor_id` / `PT_REGS_IP` 在本内核都拿不到有用值. 实际是"每条 syscall 触发一次 kprobe + 按 syscall 号计数", 即 trigger-based 频次画像 (perf-top-for-syscalls), 与 perf-record 不同色. README 已写明.
+4. **多 CPU 下 PerCpuArray 一致性**: aya `mytrace` 用 `PerCpuArray`; 跨 CPU 取 0 号 slot 时, 在 SMP 下记录 mix. demo 程序若有此需求, 必须用 `bpf_get_smp_processor_id` + per-cpu key —— 但该 helper 当前**未注册** (见 §2.2), 故 profile demo 用全局 `HashMap` 而非 per-cpu (smp1 下无歧义; SMP 下计数为各 CPU 之和, 语义仍正确).
+5. **profile 架构相关性**: syscall 号取值假设 `&UserContext` 偏移 0 == syscall-号寄存器 (x86_64 `rax`). 其它架构 `UserContext`/`TrapFrame` 首字段不同时需调 `profile-common::SYSNO_OFFSET_IN_USERCONTEXT` 再验 (见 §8 矩阵未勾项)。
 
 ## 8. 验证矩阵 (汇总)
 

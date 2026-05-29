@@ -5,6 +5,282 @@
 
 ---
 
+## 2026-05-29 — T3 D3: profile demo (kprobe syscall 频次画像)
+
+- author: claude (代 LorenzLorentz)
+- base: `feat/starry-ebpf-userspace` @ `9bc47f9b6`
+- 目标: demo-stack-design.md §2.2 D3 `profile` — kprobe + HashMap, 与 D1
+  同色 (无 ringbuf 依赖), 但采集面是**整条 syscall 分发路径的频次直方图**
+  (perf-top-for-syscalls), 区别于 D1 的"单 syscall 精确计数"与 D2 的 sched
+  ringbuf.
+
+### 内核侧能力复核 (定设计前逐条对代码核实)
+
+- **helper 集** (`kbpf_basic::helper::init_helper_functions`, `ebpf/mod.rs:57`):
+  注册了 map lookup/update/delete、`bpf_ktime_get_ns`、`bpf_perf_event_output`、
+  **`bpf_probe_read` (id 4)**、`trace_printf`、ringbuf 一族。**未注册**
+  `bpf_get_smp_processor_id` (8) 与 `bpf_get_current_pid_tgid` (14) →
+  demo-stack-design §2.2 原拟的 `bpf_get_smp_processor_id` + `PT_REGS_IP` 路线
+  **不可用** (且 kprobe 入口 IP 恒等于探测点地址, 当 key 只会得到 1 个桶,
+  违反 §4.2 "≥3 distinct" 判据). 改设计如下。
+- **kprobe ctx ABI**: `KprobePerfCallBack::call` 把 `&mut PtRegs` 当单指针 ctx
+  喂给 rbpf (`perf/kprobe.rs:150` + `perf/bpf.rs::execute_with_ptregs`);
+  aya `ProbeContext::arg(0)` 在 x86_64 读 `PT_REGS_PARM1=rdi`. 与 kret/
+  syscall_ebpf demo 同路, 已验可读寄存器。
+- **syscall 号取值**: kprobe 挂 `starry_kernel::syscall::handle_syscall(uctx:
+  &mut UserContext)` → arg0(rdi)=`&UserContext`. x86_64 `UserContext{tf:TrapFrame,
+  ..}`, `TrapFrame.rax` 是首字段, `sysno()==rax` (`axcpu/x86_64/context.rs:120`),
+  即 `&UserContext` 偏移 0. 故一次 `bpf_probe_read::<u64>(uctx)` 读 8 字节即得
+  syscall 号, **无需追结构偏移**。
+- **attach 路径**: aya `KProbe::attach` 在 `FEATURES.bpf_perf_link()==false` 时走
+  `perf_attach_either` = ioctl `PERF_EVENT_IOC_SET_BPF` + `IOC_ENABLE`, 二者
+  `perf/mod.rs::ioctl` 都实现. 启动日志里的 `bpf: unsupported command 28`
+  (BPF_LINK_CREATE) / `18` (BTF_LOAD) 与 CPUMAP/DEVMAP "not implemented" 都是
+  aya **加载期能力探测**的噪声, 非致命 (程序成功 load + attach)。
+
+### 改动 (本次)
+1. `user/ebpf/profile/` (新, 3-crate aya workspace, 仿 syscall_ebpf/sched_trace):
+   - `profile-ebpf`: `#[kprobe] handle_syscall` → `bpf_probe_read(arg0)` 取
+     syscall 号 → `HashMap<u32,u64>[sysno]++`. 无 loop (verifier 友好)。
+   - `profile` (loader, 纯 sync 无 tokio): attach kprobe, SIGTERM/SIGINT 落
+     `AtomicBool` → 排空 + 按计数降序打印 `PROFILE_BEGIN..PROFILE_END
+     total=.. distinct=.. top1_*`. 进程退出关 fd → kprobe Drop unregister。
+   - `profile-common`: 记录 `SYSNO_OFFSET_IN_USERCONTEXT=0` 的 ABI 假设。
+2. `scripts/axbuild/src/starry/user_ebpf.rs`: `PROGRAMS` + 单测 `expected` 加
+   `"profile"`。
+3. `test-suit/starryos/ebpf/qemu-smp1/profile/`: `qemu-x86_64.toml` +
+   `sh/profile.sh` (反 fallback 验证)。
+4. **内核修复** `kernel/src/syscall/mod.rs`: `handle_syscall` 加
+   `#[inline(never)]` (见下根因)。
+
+### 实跑发现 + 根因 (§4.2/4.3) — docker 实跑 (2026-05-29)
+首跑 (未加 `#[inline(never)]`): kallsyms 命中 `handle_syscall`、program load +
+attach 成功、loader 走到 dump, 但 `total=0` —— 连 loader 自身的 `nanosleep`
+都没计到, 即 **kprobe 一次都没 fire**。
+
+**可证伪根因**: `handle_syscall` 只有一个调用点 (`task/user.rs:36`
+`ReturnReason::Syscall => handle_syscall(&mut uctx)`); release 下 LLVM 把整个
+分发器 inline 进该 run loop, 同时仍发出独立符号 (故 kallsyms 命中) —— int3 落
+在那份**从不被执行**的离线副本上, 探针永不触发。这与 commit `1f6579f41` 修
+`sys_getpid` 的 gap #3 **完全同型**。修法: `handle_syscall` 加 `#[inline(never)]`,
+强制调用点真的 `call` 到带 int3 的符号。
+
+附带过程: 改源后 `handle_syscall` 地址漂移, 而 kallsyms 是 build.rs `nm` 上一
+轮二进制的两遍机制 (仅 `rerun-if-changed=ext_linker.ld` 触发重算). 故需 `touch
+ext_linker.ld` 强制 build.rs 重跑, 连编两遍令 kallsyms 收敛回当前 .text 布局
+(kallsyms 串在 .rodata, 不挪 .text 地址, 两遍稳定)。
+
+### 反 fallback 自检 (§4.6)
+1. **绕路?** 否. 数据全程 kprobe→rbpf VM→HashMap→user 态 `bpf(MAP_GET_NEXT_KEY/
+   LOOKUP)` 迭代, 不读 trace_pipe / dmesg. 断言 `total≥1000` (非 `>0`)、
+   `distinct≥3`、`top1≥20%` (整数判 `top1*5≥total`)。
+2. **依赖未通子系统?** 否. 只用已注册 helper (`bpf_probe_read` + map) 与已端到
+   端的 kprobe+HashMap 路, 不碰 ringbuf / smp_id / pid helper。
+3. **Linux 语义对齐?** syscall 号即 x86_64 saved `rax`; top1=1=write (dd bs=1
+   的 2 万次 write), 与 Linux `perf top -e raw_syscalls` 同义。
+4. **新代码可被触发?** `dd if=/dev/zero of=/dev/null bs=1 count=20000` 造 2 万
+   read+2 万 write 主导热点, 必触发。
+
+### 验证 (§4.5)
+- [x] `cargo xtask starry user-ebpf build --program profile --arch x86_64`: 通过
+  (bpf-linker 在 `/cargo-target/cargo-bin/bin`, 需加 PATH; loader musl 链接 OK)。
+- [x] qemu x86_64 (`-g ebpf -c profile`): **PASS** —
+  `PROFILE_END total=40310 distinct=33 top1_sysno=1 top1_count=20001 top1_pct=49.6`
+  / `PROFILE_PASS ... 3 re-attach cycles clean`. 端到端: kprobe attach →
+  handle_syscall fire (每条 syscall) → rbpf VM → `bpf_probe_read` 取 sysno →
+  HashMap → user 态降序直方图。3 次 attach/detach (`write_kernel_text` 改内核
+  文本) 无 panic、样本数稳定 (40294) → unregister 路径不泄漏。
+- [x] `cargo fmt --all -- --check` (主 workspace) + profile crate fmt: 通过。
+- [ ] qemu riscv64/aarch64/loongarch64: 待补 (sysno 取值偏移与 arg ABI 架构相关;
+  `profile-common::SYSNO_OFFSET_IN_USERCONTEXT` 标了 x86_64=0 的假设, 其它架构
+  `UserContext` 首字段非 rax 时需调整 + 重验)。
+
+### 内核修复 PR 边界
+`#[inline(never)] handle_syscall` 属"让 kprobe 能挂到 syscall 分发器"的单点修复,
+与 commit `1f6579f41` 的 `sys_getpid` 同类, 可并入同一 kernel PR 或独立小 PR;
+与 demo crate / test-suit 提交分开。
+
+### 已知未做 (follow-up)
+- rootfs 自动安装 + `-c ebpf` group 入主 CI: 同 D2 条, 二进制架构相关, 暂走
+  standalone 脚本 + 手跑。
+- 多架构: 见上验证矩阵未勾项。
+
+---
+
+## 2026-05-29 — T3 D2: sched_trace demo (raw tp + perf ringbuf)
+
+- author: claude (代 LorenzLorentz)
+- base: `feat/starry-ebpf-userspace` @ `ade35a8e6`
+- 目标: demo-stack-design.md §2.3 D2 `sched_trace` — `sched:sched_switch`
+  raw tracepoint → BPF prog 写 perf ringbuf → 用户态 `PerfEventArray` reader.
+
+### 内核侧支持复核 (用户要求"确认 ebpf 内核相关支持情况")
+
+D2 的两个前置在审计后已分别落地, 本次逐条对代码复核 (不是只读 journal):
+
+1. **TP-P0-1 sched_switch (已通)**:
+   - `kernel/src/tracepoint/sched.rs`: `define_event_trace!(sched_switch,
+     TP_PROTO(prev_tid: u64, next_tid: u64, prev_state: u32))` + `#[impl_interface]
+     impl SchedTracepoint`.
+   - `os/arceos/modules/axtask/src/run_queue.rs:701-708`: `switch_to` 在架构切换
+     前 `call_interface!(SchedTracepoint::on_sched_switch(prev.id, next.id,
+     prev.state() as u32))`, feature `tracepoint-hooks` 默认由 `kernel/Cargo.toml`
+     ax-feat (line 52) → `axfeat/Cargo.toml:67` → `ax-task/tracepoint-hooks` 级联开启.
+   - raw tp attach: `perf/raw_tracepoint.rs::bpf_raw_tracepoint_open` →
+     `find_ext_tracepoint_by_name("sched_switch")` 现可命中.
+2. **PERF-P0-1/2/3 perf mmap ringbuf (已通)**:
+   - `perf/bpf.rs::BpfPerfEventWrapper::device_mmap`: 分配 `(1+2^N)` 连续页 →
+     `BpfPerfEvent::do_mmap` 初始化 `perf_event_mmap_page`; `pages` 字段在 inner
+     之后声明, Drop 时归还 (P0-3 leak 已闭). `write_event` 在 `pages.is_some()`
+     时真正写 (不再静默丢).
+   - `perf/mod.rs:136 PerfEvent::device_mmap` ← `syscall/mm/mmap.rs:176` 的
+     `fl.device_mmap(offset,length)` 调到; `bpf_perf_event_output` 经
+     `PERF_FILE` 表 → `write_event`.
+3. **helper / ABI 复核**:
+   - `bpf_perf_event_output` + `bpf_ktime_get_ns` 都在
+     `kbpf_basic::helper::init_helper_functions` 注册 (`ebpf/mod.rs:57`);
+     `transform.rs::ebpf_time_ns` 返回 `monotonic_time_nanos`.
+   - `BPF_F_CURRENT_CPU` 在 kbpf-basic `perf_event_output` 解析为
+     `current_cpu_id()` → map[cpu] → fd, 与 aya `PerfEventArray::output` 一致.
+   - **raw tp 上下文 ABI**: ktracepoint `basic_macro.rs:137`
+     `args = [AsU64::as_u64($arg)..]`, 即每个 TP_PROTO 字段 widen 成一个 u64 slot.
+     sched_switch → `[prev_tid, next_tid, prev_state(u32→u64)]`, BPF prog 按
+     `*const [u64;3]` 读 (与 `user/ebpf/rawtp` 同形态).
+   - `kbpf-basic` map 分发支持 `BPF_MAP_TYPE_PERF_EVENT_ARRAY` (`map/mod.rs:268`).
+   - `BPF_MAP_TYPE_RINGBUF` 的 map-fd mmap (PERF-P1-1) 仍未做 → **必须走
+     legacy PerfEventArray (perf-buffer), 不能用 aya `RingBuf`**. 本 demo 即如此.
+
+→ 结论: D2 所需内核能力全部就绪, 可以落 demo.
+
+### 改动 (本次)
+1. `user/ebpf/sched_trace/` (新, 3-crate aya workspace, 仿 rawtp/syscall_ebpf):
+   - `sched_trace-common`: `#[repr(C)] SchedSwitchEvent { prev_tid, next_tid,
+     prev_state, _pad, ts_ns }` (32B, 共享 ABI).
+   - `sched_trace-ebpf`: `#[raw_tracepoint(tracepoint="sched_switch")]` 读
+     `[u64;3]` → 填 `SchedSwitchEvent` (ts 用 `bpf_ktime_get_ns`) →
+     `PerfEventArray::output(&ctx, &ev, 0)`.
+   - `sched_trace` (loader, 纯 sync, 无 tokio): `PerfEventArray::open` 每 cpu
+     一个 buffer (attach 前先开, 避免早期丢), `for_each` 解析 `PerfEvent::Sample`
+     → `println!("prev=.. next=.. state=.. ts=..")`. stdout 行缓冲, SIGTERM 不丢
+     已打印行; 进程退出关 fd → raw tp 自动 unregister.
+2. `scripts/axbuild/src/starry/user_ebpf.rs`: `PROGRAMS` + 单测 `expected` 加
+   `"sched_trace"`.
+3. `test-suit/starryos/ebpf/sched_trace.sh` (新): 反 fallback 验证脚本.
+
+### 反 fallback 自检 (§4.6)
+1. **绕路?** 否. 数据来自 user 态 `PerfEventArray` (mmap'd ringbuf), 不读
+   trace_pipe 文本, 不读 dmesg. 脚本断言 `prev=` 记录数 ≥ 100 (非 `>0`) +
+   ≥2 个不同 next tid (反证 probe 装错位置).
+2. **依赖未通子系统?** 否 — PERF-P0-1 + TP-P0-1 均已在代码中复核为通.
+   未使用 `BPF_MAP_TYPE_RINGBUF` map mmap (PERF-P1-1 未做), 故用 PerfEventArray.
+3. **Linux 语义对齐?** sched_switch 三元组 (prev/next tid + prev_state) 与
+   Linux `sched:sched_switch` 关键字段对齐; comm/prio 走 saved_cmdlines (见
+   2026-05-23 条). 同样 aya 程序在 host Linux 可跑作对照 (待用户在 docker 后做).
+4. **新代码可被触发?** `sh -c 'while :; do :; done'` × 2 制造调度抖动即触发.
+
+### 验证 (§4.5) — docker 实跑 (2026-05-29)
+- [x] `cargo xtask starry user-ebpf build --program sched_trace --arch x86_64`:
+  **通过** (eBPF 字节码经 bpf-linker 0.10.3 编出, loader musl 链接 OK,
+  `/cargo-target/x86_64-unknown-linux-musl/release/sched_trace` 1.5MB ELF).
+- [x] qemu x86_64 (`--test-group ebpf -c sched_trace`): **FAIL — 内核 panic**.
+
+#### 实跑发现 (复现现状, §4.2)
+启动 → `Initialized 5 tracepoints` (sched_switch/_fork/_exit + openat/mkdirat) →
+loader 加载 prog + 建 PERF_EVENT_ARRAY map + attach raw tp 成功 → **下一次
+sched_switch 触发即 panic**:
+```
+tracepoint/mod.rs:115:18: sleeping or rescheduling is not allowed in
+atomic context: irq_enabled=false, preempt_count=1
+```
+归类 **A (内核 panic)**.
+
+**可证伪根因 (§4.3)**: `sched_switch` 在 `axtask::run_queue::switch_to` 内触发
+(原子上下文: IRQ off + preempt_count=1), 而 ktracepoint 的 fire path
+`KernelTraceOps::read_tracepoint_state` (`tracepoint/mod.rs:115`) 对
+`KernelExtTracePoint = Arc<ax_sync::Mutex<ExtTracePoint>>` (mod.rs:14/26) 做
+`ext_tp.lock()` —— `ax_sync::Mutex` 是**会睡眠**的锁, 在原子上下文加锁即触发
+axtask 的 "atomic context" 守卫 panic. 这条路径仅在 static key 打开 (即有
+consumer attach) 后才走, 所以 boot 不 panic、attach 后第一次切换才炸. → TP-P0-1
+(commit `6863ee62f`) 落地时**从未端到端验过带 BPF consumer 的 sched_switch**,
+是预存内核 bug, 影响**任何** sched_switch consumer, 不只本 demo.
+
+次要 (非致命): `kbpf_basic::preprocessor:85 relocation for ty: 0 not implemented,
+instruction index: 16` —— 这是 kbpf-basic 把一条 `src=0` 的普通 `LD_DW_IMM`
+(纯 64-bit 立即数加载) 误报成 relocation; map 引用走 `BPF_PSEUDO_MAP_FD` (src=1)
+是被正确处理的, 故本条仅是噪声日志, 不影响 map 接线.
+
+#### 修复方向 (留独立 kernel PR, 不与 demo 混)
+让 sched_switch fire path 原子安全:
+1. `KernelExtTracePoint` 的 `ax_sync::Mutex` → 自旋锁 (`kspin`/`SpinNoIrq`):
+   register/unregister (syscall 上下文) 与 fire (原子上下文) 都不睡. callback 执行
+   (rbpf VM, 已在 `spin::Mutex` 下; perf `write_event` 写 mmap 页无 alloc;
+   `PollSet::wake` 走唤醒队列) 需逐一确认原子安全.
+2. 若后续要支持 `echo 1 > events/sched/sched_switch/enable` (Default callback
+   走 trace_pipe), 还需把 `raw_pipe` / `cmdline_cache` 两把 `ax_sync::Mutex`
+   也改原子安全或在原子上下文跳过.
+本 demo crate 本身正确 (编译 + 加载 + attach 均通); 阻塞点在内核 TP 基础设施.
+
+#### 修复落地 + 端到端通过 (2026-05-29 二次实跑)
+
+用户选 "修内核并重跑验证". 实跑中逐个炸出并修掉**三个**独立内核 bug
+(均为首次有 BPF consumer 走 raw-tp + perf 路径才暴露, 全是预存 latent bug):
+
+1. **TP fire path 原子上下文睡眠锁** (上文 panic #1):
+   `KernelExtTracePoint` 由 `ax_sync::Mutex` → `ax_kspin::SpinNoPreempt`
+   (`tracepoint/mod.rs`). fire path (`read_tracepoint_state`) 在 `switch_to`
+   原子上下文加锁不再睡. `raw_pipe`/`cmdline_cache` 仍保留 `ax_sync::Mutex`
+   (只在阻塞的 trace_pipe 文本路径用, 不在原子上下文).
+
+2. **raw tp 回调 `Ctx` downcast 失败** (panic #2 `raw_tracepoint Ctx mismatch`):
+   `ktracepoint::RawTraceEventFunc` 把 payload 存为 `Box<dyn Any+Send+Sync>`,
+   `call` 传给闭包的是 `&self.data` —— 闭包看到的具体类型是**那个 Box 本身**,
+   不是 `Ctx`. 故 `data.downcast_ref::<Ctx>()` 永远失败. 改成先 downcast 到
+   `Box<dyn Any+Send+Sync>` 再 downcast 到 `Ctx` (`perf/raw_tracepoint.rs`).
+   (用 host `rustc` 小程序复现确认了这个 deref-vs-unsize 强制转换行为.)
+
+3. **`write_kernel_text` 非 LIFO 嵌套 `SpinNoIrq` 泄漏 IRQ-disabled** (panic #3
+   `shm.rs:387 ... irq_enabled=false, preempt_count=0`):
+   `mm/access.rs::write_kernel_text` 先取 `kernel_aspace().lock()` (SpinNoIrq A,
+   存 IRQ=on/关 IRQ), 再进 `stop_machine` 取 `STOP_MACHINE_LOCK` (SpinNoIrq B,
+   此时存的是 IRQ=**off**); A 的 guard 被 move 进闭包**先于** B 释放 (恢复
+   IRQ=on), B 后释放又把 IRQ 恢复成它存的 **off** —— 两把 IRQ-save 锁交叉了存档,
+   函数返回时 IRQ 被遗留为 disabled. 平时调 `write_kernel_text` 后会 sysret 从用户
+   上下文恢复 IF 而掩盖; 但 `disable_key` 发生在 `do_exit`→`close_all_fds` 里
+   (raw tp fd drop → unregister → disable_key), 紧接着 `clear_proc_shm` 仍在内核态
+   且带着被泄漏的 IRQ-off, 撞上原子上下文守卫. 修法: 把 `kernel_aspace().lock()`
+   挪进 `stop_machine` 闭包内 (LIFO 嵌套), 与已正确的 kprobe
+   `set_writeable_for_address` 路径一致. **此 bug 影响任何在 IRQ-on 内核态调
+   `write_kernel_text` 且不接 sysret 的场景, 与 eBPF 无关.**
+
+   用 `error!("DBG ... irqs_enabled()")` 在 `do_exit`/raw-tp Drop 两处打点,
+   精确定位到 `unregister` 前后 IRQ 由 on 变 off, 锁定 #3 根因后回退打点.
+
+- [x] qemu x86_64 (`--test-group ebpf`): **PASS** —
+  `sched_trace: captured 608 sched_switch records` /
+  `SCHED_TRACE_PASS: 608 records, 9 distinct next tids` (≥100 + ≥2 distinct
+  两条强断言都过). 端到端链路: raw tp attach → sched_switch fire → rbpf VM →
+  `bpf_perf_event_output` → mmap'd PerfEventArray ringbuf → 用户态 `for_each` 排空.
+- [x] `cargo fmt --all -- --check`: 通过.
+- [ ] qemu riscv64: 待补 `build-riscv64gc-*.toml` + `qemu-riscv64.toml` +
+  riscv64 loader 二进制后验 (三处内核修复均为架构无关逻辑, 预期同样通过).
+
+#### 内核修复 PR 边界
+三个修复都属"让 tracepoint eBPF 基础设施在原子/退出路径正确工作", 同一 feature
+启用面, 归一个 kernel PR (与 demo crate / test-suit 的提交分开). 涉及文件:
+`kernel/src/tracepoint/mod.rs`, `kernel/src/perf/raw_tracepoint.rs`,
+`kernel/src/mm/access.rs`.
+
+### 已知未做 (follow-up)
+- **rootfs 自动安装 + `-c ebpf` 测试 group toml**: 现 harness 的 sh-pipeline 只
+  从 case `sh/` 注入文件, 无声明式"注入预编译二进制"字段; eBPF 二进制是架构相关
+  产物, 不宜入库. 按 demo-stack-design §5 ("暂不入主 CI, 先本地手跑"), 本次只交付
+  standalone 脚本 + 手跑步骤; CI group 接线留独立 follow-up (需新增 build→stage
+  二进制到 rootfs 的步骤, 改动面要单独验).
+- aya_log 路径现在 PERF-P0-1 通了, 理论上 `info!` 可恢复 (WORKFLOW §7.2 欠账),
+  但 D2 走显式 PerfEventArray 更稳, 不依赖 aya_log 的 RINGBUF-map mmap.
+
+---
+
 ## 2026-05-23 — T1 开工: 落地 TP-P0-1 + TP-P0-2 (sched 一组)
 
 - author: claude (代 LorenzLorentz)
