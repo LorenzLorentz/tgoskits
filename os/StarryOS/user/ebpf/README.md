@@ -12,6 +12,8 @@
 | `rawtp/` | raw tracepoint (`sys_clone`) | `kernel/src/perf/raw_tracepoint.rs` |
 | `mytrace/` | tracepoint (`syscalls:sys_enter_openat`) | `kernel/src/perf/tracepoint.rs` |
 | `syscall_ebpf/` | syscall 计数 (kprobe + HashMap) | `kernel/src/perf/kprobe.rs` + `ebpf/map.rs` |
+| `sched_trace/` | sched_switch 追踪 (raw tp + perf ringbuf) | `kernel/src/tracepoint/sched.rs` + `perf/bpf.rs` |
+| `profile/` | syscall 频次画像 (kprobe `handle_syscall` + HashMap) | `kernel/src/perf/kprobe.rs` + `ebpf/map.rs` |
 | `upb/` | uprobe (用户函数) | `kernel/src/perf/uprobe.rs` (Phase 3 未接通,见 §限制) |
 | `upb2/` | uprobe + uretprobe (musl libc) | 同上 |
 | `async_test/` | tokio breakpoint 测试 (不含 eBPF) | 仅依赖 `core::arch::breakpoint` |

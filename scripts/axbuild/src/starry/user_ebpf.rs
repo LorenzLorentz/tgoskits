@@ -26,6 +26,8 @@ const PROGRAMS: &[&str] = &[
     "rawtp",
     "mytrace",
     "syscall_ebpf",
+    "sched_trace",
+    "profile",
     "upb",
     "upb2",
 ];
@@ -173,6 +175,8 @@ mod tests {
             "rawtp",
             "mytrace",
             "syscall_ebpf",
+            "sched_trace",
+            "profile",
             "upb",
             "upb2",
         ];
