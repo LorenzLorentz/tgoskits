@@ -53,6 +53,14 @@ pub struct ArgsKmodBuild {
     /// Build every module crate under `os/StarryOS/modules/`.
     #[arg(long, conflicts_with = "module")]
     pub all: bool,
+
+    /// Cargo features to enable for the module build (comma-separated,
+    /// repeatable). A module depends transitively on `ax-hal`, which needs
+    /// a platform feature selected at compile time; the `qemu` feature
+    /// pulls in `ax-feat/defplat` (per-arch default platform), so it is the
+    /// default. Pass `--features ''` to build with no features.
+    #[arg(long, value_delimiter = ',', default_value = "qemu")]
+    pub features: Vec<String>,
 }
 
 impl Starry {
@@ -83,6 +91,13 @@ impl Starry {
         std::fs::create_dir_all(&out_root)
             .with_context(|| format!("create {}", out_root.display()))?;
 
+        let features: Vec<String> = args
+            .features
+            .iter()
+            .filter(|f| !f.is_empty())
+            .cloned()
+            .collect();
+
         for module_path in module_paths {
             build_one_module(
                 &workspace_root,
@@ -90,6 +105,7 @@ impl Starry {
                 target_triple,
                 &linker_script,
                 &out_root,
+                &features,
             )?;
         }
         Ok(())
@@ -166,6 +182,7 @@ fn build_one_module(
     target_triple: &str,
     linker_script: &Path,
     out_dir: &Path,
+    features: &[String],
 ) -> Result<()> {
     let cargo_toml = module_path.join("Cargo.toml");
     if !cargo_toml.exists() {
@@ -180,11 +197,15 @@ fn build_one_module(
     println!("[kmod] building {module_name} for {target_triple}");
 
     // Step 1: cargo build the module crate into an rlib.
-    let status = Command::new("cargo")
-        .args(["build", "--release", "--manifest-path"])
+    let mut cmd = Command::new("cargo");
+    cmd.args(["build", "--release", "--manifest-path"])
         .arg(&cargo_toml)
         .arg("--target")
-        .arg(target_triple)
+        .arg(target_triple);
+    if !features.is_empty() {
+        cmd.arg("--features").arg(features.join(","));
+    }
+    let status = cmd
         .current_dir(workspace_root)
         .status()
         .with_context(|| format!("invoke cargo build for {module_name}"))?;
