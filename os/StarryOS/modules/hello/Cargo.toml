@@ -18,7 +18,6 @@ kmod-tools = "0.2"
 default = []
 qemu = [
     "ax-feat/defplat",
-    "ax-feat/bus-pci",
     "ax-feat/display",
     "starry-kernel/input",
     "starry-kernel/vsock",
