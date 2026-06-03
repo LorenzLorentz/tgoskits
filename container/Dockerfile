@@ -85,6 +85,40 @@ RUN set -eux; \
     cargo --version; \
     cargo install cargo-binutils
 
+# eBPF userspace demo toolchain (test-suit/starryos/ebpf): the aya programs
+# under os/StarryOS/user/ebpf/ cross-compile their bytecode to
+# `bpfel-unknown-none` via `bpf-linker`, and their std loaders link against
+# musl. `bpf-linker` reads the bitcode emitted by the nightly rustc, so it must
+# be built against the *same* LLVM major version that rustc ships (currently
+# LLVM 22). Install llvm-22 dev libraries from apt.llvm.org and build
+# bpf-linker against them.
+RUN set -eux; \
+    install -d /etc/apt/keyrings; \
+    wget -qO /etc/apt/keyrings/llvm-snapshot.asc https://apt.llvm.org/llvm-snapshot.gpg.key; \
+    . /etc/os-release; \
+    echo "deb [signed-by=/etc/apt/keyrings/llvm-snapshot.asc] http://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-22 main" \
+        > /etc/apt/sources.list.d/llvm-22.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends llvm-22-dev libpolly-22-dev; \
+    rm -rf /var/lib/apt/lists/*
+
+# - rust-src + the musl targets are needed by the pinned toolchain to build the
+#   aya loaders (std musl binaries) for the demo arches.
+# - aya-build shells out to `rustup run nightly cargo build --target
+#   bpfel-unknown-none -Z build-std=core`, so a generic `nightly` channel with
+#   rust-src must also be present.
+# - bpf-linker is built with the matching llvm-22 feature.
+RUN set -eux; \
+    cd /tmp/rust-toolchain; \
+    rustup component add rust-src; \
+    rustup target add \
+        x86_64-unknown-linux-musl \
+        aarch64-unknown-linux-musl \
+        riscv64gc-unknown-linux-musl; \
+    rustup toolchain install nightly --profile minimal --component rust-src; \
+    LLVM_SYS_221_PREFIX=/usr/lib/llvm-22 \
+        cargo install bpf-linker --no-default-features --features llvm-22
+
 WORKDIR /workspace
 
 CMD ["/bin/bash"]

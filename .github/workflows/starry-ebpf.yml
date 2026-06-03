@@ -1,0 +1,86 @@
+name: Starry eBPF Demos
+
+on:
+  schedule:
+    # GitHub cron uses UTC. This runs at 03:00 Beijing time (UTC+8).
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: starry-ebpf-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  starry_ebpf:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/rcore-os/tgoskits-container:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Starry eBPF demos x86_64
+            cache_key: starry-ebpf-x86_64
+            arch: x86_64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Ensure qemu user emulators
+        shell: bash
+        run: |
+          set -eux
+          command -v qemu-x86_64-static >/dev/null 2>&1 \
+            || { echo "::error::qemu-x86_64-static not found; rebuild the CI container image"; exit 1; }
+
+      # The aya eBPF demos cross-compile bytecode to bpfel-unknown-none via
+      # bpf-linker (which must match the nightly rustc LLVM major version) and
+      # link their std loaders against musl. The published container bakes this
+      # in (see container/Dockerfile); install it here too so the job is
+      # self-contained on images built before that layer landed.
+      - name: Ensure eBPF toolchain
+        shell: bash
+        run: |
+          set -eux
+          rustup component add rust-src
+          rustup target add x86_64-unknown-linux-musl
+          rustup toolchain install nightly --profile minimal --component rust-src
+          if ! command -v bpf-linker >/dev/null 2>&1; then
+            . /etc/os-release
+            # Reference the armored key directly via signed-by; the CI image
+            # has no gpg to dearmor it into a keyring.
+            install -d /etc/apt/keyrings
+            wget -qO /etc/apt/keyrings/llvm-snapshot.asc https://apt.llvm.org/llvm-snapshot.gpg.key
+            echo "deb [signed-by=/etc/apt/keyrings/llvm-snapshot.asc] http://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-22 main" \
+              > /etc/apt/sources.list.d/llvm-22.list
+            apt-get update
+            apt-get install -y --no-install-recommends llvm-22-dev libpolly-22-dev
+            LLVM_SYS_221_PREFIX=/usr/lib/llvm-22 \
+              cargo install bpf-linker --no-default-features --features llvm-22
+          fi
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ matrix.cache_key }}
+          save-if: ${{ github.event_name == 'schedule' }}
+
+      - name: Show Rust version
+        run: rustc --version
+
+      - name: Run Starry eBPF demo suite
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cargo xtask starry test qemu --arch "${{ matrix.arch }}" -g ebpf
