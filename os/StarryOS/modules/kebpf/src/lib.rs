@@ -127,13 +127,19 @@ pub fn bpf(cmd: bpf_cmd, attr: &bpf_attr) -> AxResult<isize> {
 
 #[init_fn]
 pub fn kebpf_init() -> i32 {
-    ax_log::ax_println!("Hello, eBPF Kernel Module!");
+    // Use `ax_log::print_fmt` (a real, retained kernel symbol) rather than the
+    // `ax_println!` macro: the macro expands to `ax_log::__print_impl`, which the
+    // kernel inlines into its own callsites and therefore does not keep as a
+    // standalone symbol in `.kallsyms` — so a module relocation against it cannot
+    // be resolved at load time. `print_fmt` is the function the kernel actually
+    // retains.
+    let _ = ax_log::print_fmt(format_args!("Hello, eBPF Kernel Module!\n"));
     0
 }
 
 #[exit_fn]
 fn kebpf_exit() {
-    ax_log::ax_println!("Goodbye, eBPF Kernel Module!");
+    let _ = ax_log::print_fmt(format_args!("Goodbye, eBPF Kernel Module!\n"));
 }
 
 module!(
