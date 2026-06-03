@@ -14,6 +14,7 @@
 //!   * heap allocation via the global allocator — it pulls in the
 //!     `__rust_no_alloc_shim_is_unstable_v2` link-time marker, which never
 //!     exists as a runtime symbol and so can never be in kallsyms.
+//!
 //! Hence the stack array + `Display` (`{}`) below, which only needs
 //! `core::fmt::write` and `<i32 as Display>::fmt` — both retained.
 
