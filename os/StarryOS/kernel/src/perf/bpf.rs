@@ -102,7 +102,7 @@ impl PerfEventOps for BpfPerfEventWrapper {
         // libbpf requires `(1 + 2^N) * PAGE_SIZE` so the data region is a
         // power of two pages; `RingPage::init` enforces ≥ 2 pages total and
         // 4 K alignment. Reject anything that would trip those asserts.
-        if len == 0 || len % PAGE_SIZE_4K != 0 {
+        if len == 0 || !len.is_multiple_of(PAGE_SIZE_4K) {
             return Err(AxError::InvalidInput);
         }
         let num_pages = len / PAGE_SIZE_4K;
