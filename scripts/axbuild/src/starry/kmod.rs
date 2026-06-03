@@ -197,11 +197,46 @@ fn build_one_module(
     println!("[kmod] building {module_name} for {target_triple}");
 
     // Step 1: cargo build the module crate into an rlib.
+    //
+    // This must mirror the *kernel's* build configuration — the same JSON
+    // target spec plus `-Z build-std=core,alloc` — so the module's `core`
+    // and `alloc` (and everything monomorphized out of them) get the SAME
+    // crate-disambiguator hash as the running kernel. The kmod loader
+    // resolves a module's relocations against the kernel kallsyms table by
+    // exact (mangled) symbol name; a plain `cargo build` links the
+    // *precompiled sysroot* `core`/`alloc`, whose hash differs from the
+    // build-std kernel, so every `core::fmt` / `alloc` symbol the module
+    // references (`core::fmt::write`, `unwrap_failed`, `handle_alloc_error`,
+    // …) would fail to resolve at load time. x86_64 has no PIE target, and
+    // the static-platform Starry kernel is built no-pie on every arch, so
+    // the module uses the no-pie spec to match.
+    let target_json = crate::build::cargo_target_json_path(target_triple, false)?;
+    let target_json = target_json.display().to_string();
+    // Override the kernel spec's `relocation-model = "pic"`: PIC routes every
+    // external-symbol access through the GOT and emits relaxable GOT relocations
+    // (e.g. x86_64 `R_X86_64_REX_GOTPCRELX`, type 42) that the kmod loader's
+    // minimal relocator does not implement. A loaded module instead needs plain
+    // absolute/PC-relative relocations. `relocation-model=static` drops the GOT,
+    // and `code-model=large` makes symbol references 64-bit absolute
+    // (`R_X86_64_64`) so they can reach the high (`0xffff_8000_…`) kernel/module
+    // load addresses without 32-bit-displacement overflow — both are types the
+    // loader supports. These are pure codegen flags: they do not change the
+    // crate-disambiguator hash, so the build-std `core`/`alloc` symbol *names*
+    // still match the kernel and resolve against `.kallsyms`.
+    let module_rustflags = [
+        "-Crelocation-model=static".to_string(),
+        "-Ccode-model=large".to_string(),
+    ];
     let mut cmd = Command::new("cargo");
     cmd.args(["build", "--release", "--manifest-path"])
         .arg(&cargo_toml)
         .arg("--target")
-        .arg(target_triple);
+        .arg(&target_json)
+        .args(crate::build::BuildInfo::build_cargo_args(
+            &target_json,
+            &module_rustflags,
+        ))
+        .env("CARGO_UNSTABLE_JSON_TARGET_SPEC", "true");
     if !features.is_empty() {
         cmd.arg("--features").arg(features.join(","));
     }
