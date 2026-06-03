@@ -8,7 +8,7 @@
 
 use alloc::sync::Arc;
 
-use ax_errno::AxResult;
+use ax_errno::{AxError, AxResult};
 use kbpf_basic::{
     linux_bpf::bpf_attr,
     preprocessor::EbpfPreProcessor,
@@ -27,9 +27,9 @@ pub fn bpf_prog_load(attr: &bpf_attr) -> AxResult<isize> {
         BpfProgMeta::try_from_bpf_attr::<EbpfKernelAuxiliary>(attr).map_err(crate::bpf_err)?;
     ax_log::warn!("bpf_prog_load: {:#?}", args);
     let _log_info = BpfProgVerifierInfo::from(attr);
-    let prog_insn = args.take_insns().unwrap();
+    let prog_insn = args.take_insns().ok_or(AxError::InvalidInput)?;
     let preprocessor =
-        EbpfPreProcessor::preprocess::<EbpfKernelAuxiliary>(prog_insn).expect("preprocess failed");
+        EbpfPreProcessor::preprocess::<EbpfKernelAuxiliary>(prog_insn).map_err(crate::bpf_err)?;
     let prog = Arc::new(BpfProg::new(args, preprocessor));
 
     let fd = add_file_like(prog, false)?;

@@ -53,9 +53,18 @@ mod prog;
 /// module as a demonstration entry point; not wired into tgoskits's
 /// static syscall dispatch (see module-level doc).
 pub fn sys_bpf(cmd: u32, attr: *mut u8, size: u32) -> AxResult<isize> {
-    let mut buf = vec![0u8; size as usize];
-    let _l = VmBytes::new(attr, size as _).read(&mut buf)?;
-
+    // Match the kernel's read_bpf_attr pattern: allocate a zero-initialised
+    // buffer sized to the kernel's bpf_attr, copy only min(size, sizeof),
+    // and interpret the result. This avoids OOB read when the user buffer
+    // is shorter than bpf_attr, and prevents unbounded allocation when the
+    // user passes an excessively large size.
+    let mut buf = vec![0u8; core::mem::size_of::<bpf_attr>()];
+    let copy_len = (size as usize).min(buf.len());
+    let mut reader = VmBytes::new(attr, copy_len as _);
+    reader.read(&mut buf[..copy_len])?;
+    // SAFETY: bpf_attr is a transparent C union with all-bytes layout; the
+    // user-supplied bytes are copied into the front of a zero-initialised
+    // buffer whose size matches sizeof(bpf_attr).
     let attr = unsafe { &*(buf.as_ptr() as *const bpf_attr) };
     let cmd = bpf_cmd::try_from(cmd).map_err(|_| AxError::InvalidInput)?;
     bpf(cmd, attr)
