@@ -126,6 +126,18 @@ cargo xtask starry kmod build --all --arch x86_64
 > 注: `STARRY_KMOD` 模式的 `lto=false` + 保留全符号会增大内核体积、禁用部分优化,
 > 故作为**独立构建开关**, 不影响生产内核 (默认 `lto=true`).
 
+### 3.3 CI 接线 (kmod-modules 测试自启 kmod 模式)
+
+`STARRY_KMOD` 既可由进程环境变量开启 (上面的手跑步骤), 也可由**单个测试 build
+wrapper** 的 `[env]` 开启 —— 见 `build::kmod_build_mode_with_env`. 主 CI 跑的是裸
+`cargo xtask starry test qemu --arch x86_64` (不导出 `STARRY_KMOD`), 若整条命令导出
+该变量会把**所有**用例的内核都重建成 large/no-LTO. 因此把 `kmod-modules` 用例单独
+放进自己的 build wrapper `test-suit/starryos/normal/qemu-kmod/`, 其
+`build-x86_64-unknown-none.toml` 在 `[env]` 里设 `STARRY_KMOD = "y"`: 只有这一个用例
+的内核以 kmod 模式构建 (保留 `.kallsyms` 符号), 其余 normal 用例继续用默认 LTO 生产
+内核. 该 wrapper 的 feature 集与 `configs/board/qemu-x86_64.toml` 完全一致, 故
+`starry_kernel`/`core`/`alloc`/`kbpf_basic` 的 hash 与 `.ko` 共建产物逐位对齐.
+
 ## 4. 验证 (x86_64)
 
 - `cargo fmt --all -- --check` ✅
@@ -133,7 +145,8 @@ cargo xtask starry kmod build --all --arch x86_64
 - `cargo xtask starry build --arch x86_64 --config <kebpf>` (feature 开) ✅ ——
   内置形态, ELF 中模块与内核共享同一 `starry_kernel` 实例.
 - **可加载形态端到端 (kmod-modules QEMU 测试) ✅**:
-  `STARRY_KMOD=y cargo xtask starry test qemu --arch x86_64 -c kmod-modules`
+  `cargo xtask starry test qemu --arch x86_64 -c kmod-modules` (无需手动导出
+  `STARRY_KMOD` —— 该用例的 build wrapper 已在 `[env]` 里自启 kmod 模式, 见 §3.3)
   → 内核启动 (验证 static/large 内核可启动) → `finit_module` 加载 hello.ko /
   kebpf.ko → 串口可见 `LOADED /lib/modules/kebpf.ko`、`Hello, eBPF Kernel Module!`、
   `KMOD_SMOKE_DONE rc=0`, `PASS kmod-modules` (无 panic).
