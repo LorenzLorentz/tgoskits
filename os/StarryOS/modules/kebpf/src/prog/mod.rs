@@ -32,7 +32,9 @@ pub fn bpf_prog_load(attr: &bpf_attr) -> AxResult<isize> {
         EbpfPreProcessor::preprocess::<EbpfKernelAuxiliary>(prog_insn).map_err(crate::bpf_err)?;
     let prog = Arc::new(BpfProg::new(args, preprocessor));
 
-    let fd = add_file_like(prog, false)?;
+    // BPF prog fds are close-on-exec in Linux, matching the kernel's built-in
+    // `handle_prog_load`; keep the fd contract identical across feature on/off.
+    let fd = add_file_like(prog, true)?;
 
     ax_log::warn!("bpf_prog_load: fd: {}", fd);
     Ok(fd as _)

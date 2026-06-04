@@ -47,6 +47,14 @@ plat-dyn = ["dep:axplat-dyn", "starry-kernel/plat-dyn"]
 rknpu = ["ax-driver/rknpu", "starry-kernel/rknpu"]
 vf2 = ["ax-hal/riscv64-visionfive2"]
 
+# Link the `kebpf` kernel module into the kernel image and register it as the
+# `bpf(2)` handler at boot through the syscall registration interface. With
+# this feature off, `bpf(2)` is served by the kernel's built-in eBPF runtime.
+# Building `kebpf` in-tree (rather than loading `kebpf.ko`) is what guarantees
+# the module shares the kernel's exact `starry_kernel`/`kbpf_basic` compilation
+# units, so its handler interoperates with the kernel's eBPF state.
+kebpf = ["dep:kebpf"]
+
 [[bin]]
 name = "starryos"
 path = "src/main.rs"
@@ -61,6 +69,7 @@ ax-driver.workspace = true
 ax-hal.workspace = true
 axplat-dyn = { workspace = true, optional = true }
 starry-kernel = { workspace = true, features = ["dev-log", "ext4"] }
+kebpf = { path = "../modules/kebpf", optional = true }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 anyhow = "1.0"

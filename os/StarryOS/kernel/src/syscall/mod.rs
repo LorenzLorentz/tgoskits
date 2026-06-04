@@ -5,6 +5,7 @@ mod kmod;
 mod mm;
 mod net;
 mod ns;
+mod registry;
 mod resources;
 mod signal;
 mod sync;
@@ -17,8 +18,8 @@ use ax_runtime::hal::cpu::uspace::UserContext;
 use syscalls::Sysno;
 
 pub use self::{
-    fs::*, io_mpx::*, ipc::*, mm::*, net::*, ns::*, resources::*, signal::*, sync::*, sys::*,
-    task::*, time::*,
+    fs::*, io_mpx::*, ipc::*, mm::*, net::*, ns::*, registry::*, resources::*, signal::*, sync::*,
+    sys::*, task::*, time::*,
 };
 
 pub fn syscall_allows_signal_restart(sysno: usize) -> bool {
@@ -824,7 +825,21 @@ pub fn handle_syscall(uctx: &mut UserContext) {
         | Sysno::open_tree
         | Sysno::memfd_secret => sys_dummy_fd(sysno),
 
-        Sysno::bpf => crate::ebpf::sys_bpf(uctx.arg0() as _, uctx.arg1(), uctx.arg2() as _),
+        // A loadable/built-in module (e.g. `kebpf`) may take over `bpf(2)` by
+        // registering a handler through the syscall registration interface.
+        // When none is registered, fall back to the kernel-resident eBPF
+        // runtime (`crate::ebpf::sys_bpf`).
+        Sysno::bpf => match registry::lookup_syscall_handler(Sysno::bpf) {
+            Some(handler) => handler([
+                uctx.arg0(),
+                uctx.arg1(),
+                uctx.arg2(),
+                uctx.arg3(),
+                uctx.arg4(),
+                uctx.arg5(),
+            ]),
+            None => crate::ebpf::sys_bpf(uctx.arg0() as _, uctx.arg1(), uctx.arg2() as _),
+        },
         Sysno::perf_event_open => crate::perf::sys_perf_event_open(
             uctx.arg0(),
             uctx.arg1() as _,

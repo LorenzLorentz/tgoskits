@@ -38,7 +38,10 @@ pub fn bpf_map_create(attr: &bpf_attr) -> AxResult<isize> {
     .map_err(bpf_err)?;
 
     let file = Arc::new(BpfMap::new(unified_map, poll_ready));
-    let fd = add_file_like(file, false).map(|fd| fd as _);
+    // BPF object fds are close-on-exec in Linux (`anon_inode_getfd(...,
+    // O_CLOEXEC)`), matching the kernel's built-in `handle_map_create`; keep the
+    // fd contract identical whether `bpf(2)` is served by this module or #850.
+    let fd = add_file_like(file, true).map(|fd| fd as _);
     ax_log::info!("bpf_map_create: fd: {:?}", fd);
     fd
 }

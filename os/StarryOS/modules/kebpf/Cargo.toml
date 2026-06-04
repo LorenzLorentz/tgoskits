@@ -19,6 +19,7 @@ starry-kernel.workspace = true
 
 kmod-tools = "0.2"
 kbpf-basic = "0.5"
+syscalls = { version = "0.8", default-features = false }
 
 [features]
 default = []

@@ -39,7 +39,51 @@ fn toolchain_rustflags(env: &HashMap<String, String>) -> Vec<String> {
         flags.push("-Cforce-frame-pointers=yes".to_string());
     }
 
+    // Loadable-kernel-module mode (`STARRY_KMOD=y`): build the kernel with the
+    // exact codegen a `.ko` requires, so a separately-built module shares the
+    // kernel's crate-disambiguator hashes and resolves against `.kallsyms`.
+    //   * `relocation-model=static` — the `kmod_loader` relocator handles plain
+    //     absolute/PC-relative relocs but NOT GOT entries (`R_X86_64_GOTPCREL`),
+    //     which `pic` would emit.
+    //   * `code-model=large` — module/kernel symbols live at high `0xffff_8000…`
+    //     addresses; `large` emits 64-bit-absolute `R_X86_64_64` that reach them
+    //     (vs `code-model=kernel`'s 32-bit relocs, which overflow there).
+    // The caller must also disable LTO for this build (e.g.
+    // `CARGO_PROFILE_RELEASE_LTO=false`) so the kernel retains every `core` /
+    // `alloc` / `kbpf_basic` / eBPF symbol standalone in `.kallsyms` rather than
+    // inlining them away. Rustflags are folded into the crate hash, so the
+    // module MUST be built with these same flags (see `starry::kmod`).
+    if kmod_build_mode() {
+        flags.push("-Crelocation-model=static".to_string());
+        flags.push("-Ccode-model=large".to_string());
+    }
+
     flags
+}
+
+/// Whether the loadable-kernel-module build mode (`STARRY_KMOD=y`) is requested.
+///
+/// In this mode the kernel is built so a separately-compiled `.ko` can fully
+/// relocate against it: `-C relocation-model=static -C code-model=large` (see
+/// [`toolchain_rustflags`]) plus LTO disabled (see [`apply_kmod_build_mode`]) so
+/// every `core` / `alloc` / `kbpf_basic` / eBPF symbol the module references is
+/// retained standalone in `.kallsyms` instead of being inlined away. The module
+/// build (`cargo xtask starry kmod build`) uses the *same* flags so its crate
+/// hashes match the running kernel. See
+/// `os/StarryOS/docs/ebpf-followup/syscall-registration.md`.
+pub(crate) fn kmod_build_mode() -> bool {
+    std::env::var("STARRY_KMOD").is_ok_and(|v| matches!(v.as_str(), "1" | "y" | "yes" | "true"))
+}
+
+/// Apply loadable-kernel-module codegen to a prepared kernel [`Cargo`] config:
+/// disable release LTO (via the `CARGO_PROFILE_RELEASE_LTO` env cargo honours)
+/// so symbols survive into `.kallsyms`. No-op unless [`kmod_build_mode`].
+pub(crate) fn apply_kmod_build_mode(cargo: &mut Cargo) {
+    if kmod_build_mode() {
+        cargo
+            .env
+            .insert("CARGO_PROFILE_RELEASE_LTO".to_string(), "false".to_string());
+    }
 }
 
 /// Whether the build config enables target backtrace support (frame pointers / unwind).

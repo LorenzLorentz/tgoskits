@@ -29,6 +29,14 @@ pub mod perf;
 mod pseudofs;
 mod stop_machine;
 mod syscall;
+
+// The syscall registration interface is part of the kernel's module-facing
+// surface: a loadable/built-in module binds to these symbols to take over an
+// individual syscall (see `syscall::registry`).
+pub use syscall::{
+    SyscallHandler, lookup_syscall_handler, register_syscall_handler, unregister_syscall_handler,
+};
+
 mod task;
 mod time;
 mod tracepoint;

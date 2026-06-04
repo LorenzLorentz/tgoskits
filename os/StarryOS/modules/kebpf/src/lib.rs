@@ -3,21 +3,19 @@
 //!
 //! Scope differences from the source:
 //!
-//! * **No `register_syscall_handler` call.** The source kebpf module
-//!   installed itself as the `bpf(2)` dispatcher via a dynamic
-//!   `SyscallHandler` registry. tgoskits dispatches `Sysno::bpf`
-//!   statically to the kernel-resident `crate::ebpf::sys_bpf` in
-//!   `os/StarryOS/kernel/src/syscall/mod.rs` (PR-A), so the LKM has no
-//!   reason — and no API — to intercept the syscall. The module
-//!   instead retains `sys_bpf` / `bpf` as `pub` demonstrations that an
-//!   LKM can drive `kbpf-basic` directly through tgoskits's public
-//!   `starry_kernel::ebpf::*` surface. `init_fn` / `exit_fn` reduce to
-//!   load-time / unload-time log lines.
+//! * **Registers `bpf(2)` through the syscall registration interface.**
+//!   Like the source, this module installs itself as the `bpf(2)`
+//!   dispatcher: `init` calls
+//!   [`starry_kernel::register_syscall_handler`]`(Sysno::bpf, ...)` and
+//!   `exit` calls [`starry_kernel::unregister_syscall_handler`]. While a
+//!   handler is registered, the kernel's `Sysno::bpf` arm dispatches to
+//!   this module; once it is removed (or never installed) the kernel falls
+//!   back to its built-in `crate::ebpf::sys_bpf`. The same mechanism works
+//!   whether `kebpf` is linked in as a built-in or loaded as a `.ko`.
 //! * `starry_kernel::bpf::tansform` → `starry_kernel::ebpf::transform`
 //!   (path + typo fix landed in PR-A).
 //! * `axerrno` → `ax_errno`, `axlog` → `ax_log`, `axio` → `ax_io`
 //!   (workspace-package renames per `crate-fork-audit.md §6`).
-//! * `syscalls::Sysno` dependency dropped together with the registry call.
 
 #![no_std]
 extern crate alloc;
@@ -33,6 +31,7 @@ use kbpf_basic::{
 };
 use kmod_tools::{exit_fn, init_fn, module};
 use starry_kernel::{ebpf::transform::EbpfKernelAuxiliary, mm::VmBytes};
+use syscalls::Sysno;
 
 /// Convert `kbpf_basic::BpfError` (`axerrno::LinuxError`) to `ax_errno::AxError`.
 ///
@@ -48,10 +47,18 @@ fn bpf_err(e: kbpf_basic::BpfError) -> AxError {
 mod map;
 mod prog;
 
+/// Adapter matching [`starry_kernel::SyscallHandler`]: unpacks the raw
+/// `bpf(2)` argument registers (`cmd`, `attr`, `size`) and forwards them to
+/// this module's [`sys_bpf`]. Installed as the `Sysno::bpf` handler by
+/// [`kebpf_init`].
+fn bpf_syscall_handler(args: [usize; 6]) -> AxResult<isize> {
+    sys_bpf(args[0] as u32, args[1] as *mut u8, args[2] as u32)
+}
+
 /// Handle the bpf syscall from a userland-supplied `bpf_attr` pointer
-/// living in the calling task's address space. Retained from the source
-/// module as a demonstration entry point; not wired into tgoskits's
-/// static syscall dispatch (see module-level doc).
+/// living in the calling task's address space. While this module is loaded
+/// it services every `bpf(2)` call via [`bpf_syscall_handler`]; see the
+/// module-level doc.
 pub fn sys_bpf(cmd: u32, attr: *mut u8, size: u32) -> AxResult<isize> {
     // Match the kernel's read_bpf_attr pattern: allocate a zero-initialised
     // buffer sized to the kernel's bpf_attr, copy only min(size, sizeof),
@@ -122,14 +129,17 @@ pub fn bpf(cmd: bpf_cmd, attr: &bpf_attr) -> AxResult<isize> {
         }
         // Program related commands
         bpf_cmd::BPF_PROG_LOAD => prog::bpf_prog_load(attr),
-        // Object creation commands
+        // Object creation commands. Linux's `bpf(2)` (and the kernel's built-in
+        // `sys_bpf` from #850) returns `-EINVAL` for an unrecognized/unsupported
+        // command — userspace feature-probing relies on that errno — so return
+        // `InvalidInput` (EINVAL), not `Unsupported` (which maps to ENOSYS).
         bpf_cmd::BPF_BTF_LOAD | bpf_cmd::BPF_LINK_CREATE | bpf_cmd::BPF_OBJ_GET_INFO_BY_FD => {
             ax_log::warn!("bpf cmd: [{:?}] not implemented", cmd);
-            Err(AxError::Unsupported)
+            Err(AxError::InvalidInput)
         }
         ty => {
             ax_log::warn!("bpf cmd: [{:?}] not implemented", ty);
-            Err(AxError::Unsupported)
+            Err(AxError::InvalidInput)
         }
     }
 }
@@ -143,11 +153,17 @@ pub fn kebpf_init() -> i32 {
     // be resolved at load time. `print_fmt` is the function the kernel actually
     // retains.
     let _ = ax_log::print_fmt(format_args!("Hello, eBPF Kernel Module!\n"));
+    // Take over `bpf(2)` via the kernel's syscall registration interface. From
+    // now until `kebpf_exit`, the kernel dispatches `Sysno::bpf` to this module
+    // instead of its built-in `crate::ebpf::sys_bpf`.
+    starry_kernel::register_syscall_handler(Sysno::bpf, bpf_syscall_handler);
     0
 }
 
 #[exit_fn]
 fn kebpf_exit() {
+    // Relinquish `bpf(2)`; the kernel reverts to its built-in implementation.
+    starry_kernel::unregister_syscall_handler(Sysno::bpf);
     let _ = ax_log::print_fmt(format_args!("Goodbye, eBPF Kernel Module!\n"));
 }
 

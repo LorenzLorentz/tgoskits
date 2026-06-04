@@ -4986,6 +4986,7 @@ dependencies = [
  "kbpf-basic",
  "kmod-tools",
  "starry-kernel",
+ "syscalls",
 ]
 
 [[package]]
@@ -8127,6 +8128,7 @@ dependencies = [
  "axbuild",
  "axplat-dyn",
  "clap",
+ "kebpf",
  "starry-kernel",
  "tokio",
 ]
