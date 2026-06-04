@@ -56,10 +56,14 @@ pub trait PerfEventOps: Pollable + Send + Sync + Debug {
     }
 
     /// Allocate the user-visible ringbuf and return its physical start
-    /// address (length is the user-supplied mmap length, page-aligned).
-    /// Only `bpf::BpfPerfEventWrapper` overrides this; the other variants
-    /// (kprobe/tracepoint/raw-tp/uprobe wrappers) reject `mmap(perf_fd)`.
-    fn device_mmap(&mut self, _len: usize) -> AxResult<PhysAddr> {
+    /// address (length is the user-supplied mmap length, page-aligned)
+    /// together with a retainer that owns the backing pages. The caller
+    /// threads the retainer into `DeviceMmap::Physical(.., Some(anchor))`
+    /// so the pages stay live for as long as the user mapping exists, even
+    /// after `close(perf_fd)`. Only `bpf::BpfPerfEventWrapper` overrides
+    /// this; the other variants (kprobe/tracepoint/raw-tp/uprobe wrappers)
+    /// reject `mmap(perf_fd)`.
+    fn device_mmap(&mut self, _len: usize) -> AxResult<(PhysAddr, Arc<dyn Any + Send + Sync>)> {
         Err(AxError::Unsupported)
     }
 }
@@ -143,10 +147,13 @@ impl FileLike for PerfEvent {
             return Err(AxError::InvalidInput);
         }
         let len = length as usize;
-        let paddr = self.event.lock().device_mmap(len)?;
+        let (paddr, anchor) = self.event.lock().device_mmap(len)?;
+        // Anchor the ringbuf pages to the VMA: the retainer keeps them alive
+        // until `munmap`/exit, so closing the perf fd can't free memory the
+        // user address space still maps. See `BpfPerfEventWrapper::pages`.
         Ok(DeviceMmap::Physical(
             PhysAddrRange::from_start_size(paddr, len),
-            None,
+            Some(anchor),
         ))
     }
 }

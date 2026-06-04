@@ -39,12 +39,21 @@ use crate::{
 /// Rust drops fields in declaration order, so `inner` (the borrower) goes
 /// before `pages` (the owner), and the buffer is freed only after the last
 /// access through `inner` is gone.
+///
+/// `pages` is refcounted (`Arc`): `device_mmap` hands a second strong ref
+/// back through `DeviceMmap::Physical`'s retainer slot, which the resulting
+/// user VMA holds onto. The backing pages therefore outlive `close(perf_fd)`
+/// (which drops this wrapper) for as long as the user mapping is live, so a
+/// userspace read of the ringbuf after closing the fd — or a later reuse of
+/// those frames — can never observe freed memory.
 pub struct BpfPerfEventWrapper {
     inner: BpfPerfEvent,
     poll_ready: PollSet,
     /// MUST be declared after `inner`. Holds the contiguous pages backing
-    /// the ringbuf; dropping it returns them to the global page allocator.
-    pages: Option<GlobalPage>,
+    /// the ringbuf, refcounted so a user VMA keeps them alive across perf-fd
+    /// close; the frames return to the global page allocator only once both
+    /// this wrapper and every mapping built from it are gone.
+    pages: Option<Arc<GlobalPage>>,
 }
 
 impl BpfPerfEventWrapper {
@@ -93,7 +102,7 @@ impl PerfEventOps for BpfPerfEventWrapper {
         self
     }
 
-    fn device_mmap(&mut self, len: usize) -> AxResult<PhysAddr> {
+    fn device_mmap(&mut self, len: usize) -> AxResult<(PhysAddr, Arc<dyn Any + Send + Sync>)> {
         if self.pages.is_some() {
             // Linux allows only one mmap per perf event fd; a second call
             // would orphan the first user mapping if we swapped the pages.
@@ -116,8 +125,14 @@ impl PerfEventOps for BpfPerfEventWrapper {
         self.inner
             .do_mmap(kvirt.as_usize(), len, 0)
             .map_err(|_| AxError::InvalidInput)?;
+        let pages = Arc::new(pages);
+        // Hand a second strong ref back to the caller, which threads it into
+        // `DeviceMmap::Physical`'s retainer so the user VMA pins these frames
+        // until `munmap`/exit even if the perf fd (and this wrapper) is closed
+        // first. Without the anchor the pages would free under a live mapping.
+        let anchor: Arc<dyn Any + Send + Sync> = pages.clone();
         self.pages = Some(pages);
-        Ok(paddr)
+        Ok((paddr, anchor))
     }
 }
 
