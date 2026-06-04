@@ -1,9 +1,12 @@
 //! `sched:*` tracepoints.
 //!
 //! `sched_switch` is fired by `ax-task` through the cross-crate
-//! [`ax_task::SchedTracepoint`] interface (gated by `tracepoint-hooks`);
-//! `sched_process_fork` and `sched_process_exit` are emitted directly from
-//! Starry's clone and exit paths.
+//! [`ax_task::SchedTracepoint`] interface (gated by `tracepoint-hooks`).
+//!
+//! The other two `sched:*` events are defined next to their emission sites
+//! rather than here: `sched_process_fork` in `crate::syscall::task::clone`
+//! and `sched_process_exit` in `crate::task::ops`. Registration is by link
+//! section, so their physical location does not affect discovery.
 
 use ax_task::SchedTracepoint;
 
@@ -29,52 +32,6 @@ ktracepoint::define_event_trace!(
             __entry.prev_tid,
             __entry.next_tid,
             __entry.prev_state,
-        )
-    })
-);
-
-ktracepoint::define_event_trace!(
-    sched_process_fork,
-    TP_kops(crate::tracepoint::KernelTraceAux),
-    TP_system(sched),
-    TP_PROTO(parent_tid: u64, child_tid: u64),
-    TP_STRUCT__entry {
-        parent_tid: u64,
-        child_tid: u64,
-    },
-    TP_fast_assign {
-        parent_tid: parent_tid,
-        child_tid: child_tid,
-    },
-    TP_ident(__entry),
-    TP_printk({
-        alloc::format!(
-            "parent_tid={} child_tid={}",
-            __entry.parent_tid,
-            __entry.child_tid,
-        )
-    })
-);
-
-ktracepoint::define_event_trace!(
-    sched_process_exit,
-    TP_kops(crate::tracepoint::KernelTraceAux),
-    TP_system(sched),
-    TP_PROTO(tid: u64, exit_code: i32),
-    TP_STRUCT__entry {
-        tid: u64,
-        exit_code: i32,
-    },
-    TP_fast_assign {
-        tid: tid,
-        exit_code: exit_code,
-    },
-    TP_ident(__entry),
-    TP_printk({
-        alloc::format!(
-            "tid={} exit_code={}",
-            __entry.tid,
-            __entry.exit_code,
         )
     })
 );
