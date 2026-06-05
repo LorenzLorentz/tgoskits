@@ -1,7 +1,19 @@
 # report/ 是本地工作区：聚合 lorentz 本人产出的全部文档/skill/workflow/journal。
-# 仓库只跟踪最终成品（report + presentation）与本忽略文件本身，
+# 仓库只跟踪最终成品（总报告 + 四份实验报告 + presentation）与本忽略文件本身，
 # 其余聚合内容（harness/、repo-docs/ 等）一律本地保留、不入库。
 *
 !.gitignore
 !final_report.md
 !final_presentation.pptx
+!exp1/
+!exp2/
+!exp3/
+!exp4/
+exp1/*
+exp2/*
+exp3/*
+exp4/*
+!exp1/report.md
+!exp2/report.md
+!exp3/report.md
+!exp4/report.md

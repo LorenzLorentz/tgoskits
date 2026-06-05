@@ -1,30 +1,32 @@
-# OS Biglab 总结报告
+# OS BigLab 总结报告
 
-**作者**: 王鹏杰 (Joseph Joshua)
-**日期**: 2026 年 6 月 2 日
+王鹏杰
 
 ## 1. 概述
 
-本报告总结在 StarryOS（基于 ArceOS 模块构建的 Linux 兼容内核）上为期八周的内核开发工作。核心产出为：构建了一套 AI 驱动的内核开发框架（harness），完成了多线程 execve、文件锁、BusyBox 组件适配等内核功能支持，以及将 eBPF 运行时和 LKM（Loadable Kernel Module）机制从独立分支迁移至 tgoskits 主线。
-
-工作主线如下：
+本报告总结在 StarryOS（基于 ArceOS 模块构建的 Linux 兼容内核）上为期八周的内核开发工作。核心产出有四条主线，贯穿其上的是一套 **AI 驱动的内核开发框架（harness）**：
 
 ```
 BigLabA (实验基础) ──→ BigLabB (实验框架)
       │                      │
   5 个基础实验           tg-arceos-tutorial
-  个性化实验教程         5 个练习层次
-  扩展实验实践
+  个性化实验教程         5 个层次递进练习
+  3 个扩展实验
 
-EXP2 (内核功能支持) ──→ EXP3 (应用支持) ──→ EXP4 (eBPF/LKM)
-      │                      │                     │
-  多线程 execve (#273)   BusyBox 适配          eBPF 运行时 (#850)
-  文件锁 (#472)          4 个 PR               LKM 加载器 (#851)
-                                               内核模块示例 (#880)
-                                               用户态 eBPF 程序 (#886)
+         ┌──────────────── EXP1: AI 驱动的内核开发框架 (贯穿全程) ────────────────┐
+         │   Designer → Developer → Reviewer → Auditor 四角色流水线 + 三道护栏    │
+         └───────────────────────────────────────────────────────────────────────┘
+                │                    │                       │
+   EXP2 (内核功能支持) ──→ EXP3 (应用兼容) ──────→ EXP4 (eBPF / LKM)
+         │                    │                       │
+   多线程 execve #273    BusyBox 兼容           eBPF 运行时 #850/#886
+   文件锁 #472           320 PASS / 0 FAIL      LKM 加载器 #851 + kmod 模块
+                                                 可运行 demo #1132
 ```
 
-贯穿所有实验的核心基础设施是 **AI 驱动的内核开发框架**（EXP1），该框架以 Designer / Developer / Reviewer / Auditor 四角色流水线组织工作，使 AI 代理在严格的工程护栏下参与内核开发。
+整个工作的方法论可以用一句话概括：**在一个成熟、分叉、依赖盘根错节的内核上做"约束中演进"——决定代码能否落地的不是"能不能编译"，而是有没有把基线、依赖、边界、验证标准提前固定下来。** EXP1 把这套方法固化为工程框架，EXP2/3/4 则是它在三个子系统上的实战。本报告自包含，不依赖各实验的独立报告即可阅读。
+
+> 截至成稿，已合入主线的相关 PR 包括 #273 / #472 / #517 / #722 / #741 / #750 / #751 / #850 / #851 / #886 / #993 等；eBPF demo（#1132）与 kmod 模块仍在持续推进。
 
 ---
 
@@ -32,333 +34,210 @@ EXP2 (内核功能支持) ──→ EXP3 (应用支持) ──→ EXP4 (eBPF/LKM
 
 ### 2.1 动机
 
-内核开发有三个核心痛点：
-
-**测试反馈周期长。** 内核修改后在 QEMU 中启动 StarryOS 并运行测试用例，单次迭代（build + rootfs + qemu + test）需要数分钟。在发现、修复、验证的循环里，大量时间耗在等待编译和启动上。
-
-**Linux 对照成本高。** 判断 StarryOS 的一个行为是否正确，需要在 Linux 上编译运行相同的测试程序，阅读 man page 确认预期行为，有时还需阅读 Linux 内核源码确认实现细节。
-
-**重复性工作多。** 每个 bug 的修复流程高度相似（写测试、跑 Linux 对照、改内核、跑 StarryOS 验证、写报告），但随着修复数量增加，状态追踪和报告维护的负担线性增长。
+内核开发有三个核心痛点：**测试反馈周期长**（改完要 build + rootfs + qemu + test，单次迭代数分钟）；**Linux 对照成本高**（判断行为是否正确要在真实 Linux 上跑同样的程序、查 man page、读源码）；**重复性工作多，而且最贵的反馈来得最晚**——reviewer 指出的并发竞态、跨 syscall 状态不一致、和 Linux 语义不对齐，总是在人工 review 阶段才暴露，此时返工成本最高。框架的目标就是把这些晚到的、昂贵的反馈**前移**，让 AI 在提交给人类之前先自我证伪。
 
 ### 2.2 架构：四角色流水线
 
-框架基于 Claude Code 的技能（Skills）和代理（Agents）插件架构，将内核开发流程拆分为四个角色：
+框架基于 Claude Code 的 Skills / Agents 插件机制，把内核开发拆成四个相互制衡的角色，角色之间只通过共享工作区文档（`workflow.md` / `validation.md` / `journal.md`，跨角色、跨会话的单一事实来源）通信：
 
 ```
-Designer ──→ Developer ──→ Reviewer ──→ Auditor
-   │              │             │             │
- 接受任务       执行工作流     本地测试      审计 workflow
- 阅读代码库     更新状态       寻找 bug      审计 PR
- 确认上游重叠   记录完成情况   确认对齐      确认意图实现
+Designer ──→ Developer ──→ Reviewer ──→ Auditor ──┐
+ 设计工作流    实现改动      找 bug       审计意图   │
+ 查上游重叠    记录证据      查对齐       PASS/FAIL  │
+     ▲                                              │
+     └────────────── 通过 / 重做 ────────────────────┘
 ```
 
-**Designer（设计者）**：接受任务，阅读代码库，确认上游重叠。核心技能：`workflow-design`、`upstream-overlap-check`。
+- **Designer**：接受任务、读代码库、用 `upstream-overlap-check` 确认上游/本地是否已有重叠工作，产出 `workflow.md`。
+- **Developer**：执行工作流、保持改动 scope 可控、在 `validation.md` 记录可复现证据。
+- **Reviewer**：本地测试、主动找 bug、核对 Linux/POSIX/Unix 对齐——使命是**证伪而不是放行**。
+- **Auditor**：独立于实现者，审计意图是否真正实现、验证是否充分、有没有"看起来过了"的伪装，给出 PASS/FAIL 裁决。
 
-**Developer（开发者）**：执行工作流，更新状态并记录完成情况。核心技能：`kernel-quality-review`、`linux-compare`（当 Linux 兼容性被要求时）。
+关键设计是 **Reviewer / Auditor 独立于 Developer**：找 bug 与写代码由目标相反的角色承担，把人类 reviewer 的对抗性反馈固化进流水线。
 
-**Reviewer（审查者）**：本地测试，寻找 bug，确认和 Linux/POSIX/Unix 对齐。核心技能：`multilayer-test`、`bug-triage`、`linux-compare`、`concurrent-bug-checker`、`misalignment-checker`、`cross-syscall-bug-checker`、`kernel-quality-review`、`ci-monitor`。
+### 2.3 技能与脚本
 
-**Auditor（审计者）**：审计 workflow，审计 PR，确认是否实现最初的意图。核心技能：`audit`、`kernel-quality-review`、`bug-triage`、`upstream-overlap-check`。
+框架共 **20 个技能 + 16 个确定性脚本**。技能按角色分工，脚本提供"无幻觉"的确定性能力（锁顺序图 `lock-order-graph.py`、危险模式扫描 `pattern-scanner.py`、Linux 对照执行 `linux-ref-test.sh`、并发压测 `stress-test.sh` 等），由技能在需要时调用。其中三个最关键的 Reviewer 技能——`concurrent-bug-checker`、`cross-syscall-bug-checker`、`misalignment-checker`——是 §2.6 对照实验的直接产物。
 
-### 2.3 技能分配
+### 2.4 核心工作流
 
-框架包含 9 个核心技能和 3 个专业代理，构成 16 个基础设施脚本。技能涵盖从 PR 发现到提交的全流程：
+以 `hunt-bugs` 主循环为骨架，一次迭代分为：**发现**（模式扫描 → 分类 → 优先级）→ **测试 + 对照**（写 C 测试 → Linux 基线必须先过 → 跑 StarryOS → diff 返回值/errno/行为）→ **分析修复**（根因定位 → 最小修复 → 审查管道，不过则 `REVISE` 回环）→ **记录**（更新 journal / validation）。审查这一步并行调用三个证伪技能，分别盯死并发、跨 syscall、语义对齐三类最难靠跑测试发现的 bug。
 
-| 技能 | 用途 |
-|------|------|
-| `hunt-bugs` | 发现 → 测试 → 对比 → 修复 → 报告 主循环 |
-| `test-app` | Linux 应用兼容性测试 |
-| `benchmark` | 性能基准测试 |
-| `audit-kernel` | 内核内部审计（锁顺序、并发、内存泄漏） |
-| `review-quality` | 代码质量门禁 |
-| `check-upstream` | 上游 PR 去重检查 |
-| `start-submission` | 准备 PR 提交 |
-| `evolve` | 自主目标选择 + 持续开发循环 |
-| `report` | 结构化报告生成 |
+### 2.5 三道工程护栏
 
-### 2.4 工程护栏
+1. **结构化输出强制**：所有审查/审计技能按固定 schema 把结论写进 `validation.md`（期望 vs 观察、证据、严重级别），每步输出可被下一步无歧义消费。
+2. **状态记忆，单一事实来源**：`journal.md` + `validation.md` 让每个缺陷从发现到修复到回归都可追溯，防止重复修复。
+3. **审查者否决权（anti-fallback）**：Reviewer/Auditor 的使命被显式定义为"找问题，不是批准"；审查失败强制重做；已知但暂不修的限制必须**显式记录**而非悄悄绕过。
 
-三道核心工程护栏确保质量：
+### 2.6 对照实验：强模型裸跑 vs 弱模型 + 强护栏
 
-**结构化输出强制。** 所有 AI 代理通过 JSON Schema 返回可验证的结果，使流水线中的每个步骤输出可以被后续步骤无歧义消费。
+这是 EXP1 最核心的发现，也是构建整套框架的直接动因。**同一类并发任务做了两轮：**
 
-**状态记忆。** `known.json` 作为所有已发现缺陷的单一事实来源，维护状态机以防止重复修复，可以随时生成进度统计和分类报告。
+**第一轮——Claude Opus 裸写。** 用当时的 SOTA 闭源模型直接实现 EXP2 的多线程 execve（#273）和文件锁（#472），代码能编译、happy path 能跑，但被 reviewer（周睿老师）指出**大量**问题、反复返工十余次。归类后高度集中在三个方向：并发 bug（`try_lock`→EINTR、CLOEXEC 快照时机）、跨 syscall 交互（vfork 睡眠要能被 zap、锁随 close/exit 释放）、与 Linux/POSIX 不对齐（负 l_len、NULL argv、OFD l_pid）。**这些 bug 全部在人工 review 阶段才暴露，返工成本极高。**
 
-**审查者否决权。** `review-quality` 和 `kernel-reviewer` 代理独立于修复代理运行。它们的使命是找问题，不是批准。审查维度包括：修复后行为是否精确匹配 Linux、是否存在 TOCTOU 窗口或 UAF 风险、锁获取顺序是否一致、错误路径上是否正确回滚。审查失败意味着修复必须重新修改，直到所有维度通过。
+**复盘——蒸馏成审查技能。** 我把这十余轮反馈系统总结，发现它们几乎可无损映射到三类检查清单，于是固化成 `concurrent-bug-checker` / `cross-syscall-bug-checker` / `misalignment-checker` 三个技能——把人类 reviewer 的对抗性直觉沉淀成可机械执行的工作流。
 
-### 2.5 Demo：用 Harness 重新解决 EXP2
+**第二轮——弱模型在框架下重做。** 换用能力弱很多的开源模型（**GLM-5.1 与 DeepSeek-V4**）在 harness 下重做多线程 execve（工作区 `test_harness/support_multi-threaded_execve`）。这一次 Reviewer/Auditor 在提交前就用上述技能反复证伪，从 journal 可见框架内部自己捕获并修掉了和第一轮同类的 bug：
 
-以多线程 execve 问题为例，使用 glm5.1 和 deepseek-v4 两个模型，在 Harness 框架下完成修复。Reviewer 审查 4 轮，Auditor 审查 2 轮，展示了框架在复杂并发问题上的能力。
+| 内部捕获的缺陷 | 类别 |
+|----------------|------|
+| C3：clone 检查在 `add_thread()` 之前，新线程逃过 execve 标记（TOCTOU） | 并发 + 跨 syscall |
+| BUG-MEMCORRUPT：强制移除线程的 `clear_child_tid`/`robust_list_head`/`rseq` 残留写脏新地址空间 | 跨 syscall |
+| BUG-SIGSTATE：Phase 2/3 之间未检查 pending SIGKILL，违反 Linux killable 语义 | 与 Linux 不对齐 |
+| U1：迟醒的强制移除线程覆盖 `tg.exit_code` | 并发 |
+
+收敛过程可量化：**Reviewer 审查 4 轮、Auditor 审查 2 轮**，Auditor 首轮裁决 FAIL（4 个 critical）、修复后复审才 PASS，7 条关键路径逐条 source-level 追踪。
+
+**结论：弱模型 + 强护栏 > 强模型裸跑。** 决定性差异不是模型参数量，而是有没有把过往 review 经验结构化成对抗性、可机械执行的审查护栏。这也是"AI 工程"的本质——**真正稀缺的不是更强的模型，而是把领域反馈固化成流程的能力。**
 
 ---
 
 ## 3. EXP2: 内核功能支持
 
-### 3.1 多线程 execve [#273](https://github.com/rcore-os/tgoskits/pull/273)
+补齐两个被大量真实软件依赖、却长期是"假成功"占位实现的能力。两者都不是"加个 syscall"——难点在并发正确性、跨 syscall 一致性、与 Linux/POSIX 逐位对齐。
 
-**问题**：此前 `sys_execve` 在调用进程有多个线程时会直接返回 `EWOULDBLOCK`，任何多线程父进程调用 `execve` 都会失败——包括 `rustc`/LLVM、`cargo` 的进程 spawn，以及任何从线程池驱动 `std::process::Command` 的程序。
+### 3.1 多线程 execve [#273]（+1732 / -85，21 文件，05-20 合入）
 
-**实现**：分两阶段处理。第一阶段是可失败的：构建新的地址空间（路径解析 + ELF 加载）但不提交。第二阶段是不可逆的：杀死所有 sibling 线程，提交新地址空间。
+**问题**：`sys_execve` 在调用进程有多个线程时直接返回 `EWOULDBLOCK`，任何多线程父进程的 execve 都失败——覆盖 `rustc`/LLVM、`cargo`、任何从线程池驱动 `std::process::Command` 的程序。
 
-**关键设计决策**：
+**实现：两阶段提交（point-of-no-return）**。核心难点是"杀 sibling、换映像"不可逆，故严格分成可失败阶段（路径解析 + ELF 加载，不提交，出错可干净返回）与不可逆阶段（杀 sibling → 快照 CLOEXEC → 提交新 aspace → 信号重置）。
 
-1. **并发 execve 序列化**：通过 per-process `exec_lock` 序列化。锁等待是 yield-loop + `exit_request` 探测，匹配 Linux 的 "killable but not signal-interruptible" 语义。
-2. **CLOEXEC 快照时机**：在 sibling teardown 之后快照 CLOEXEC fd，确保迟到的 `fcntl(F_SETFD)` / `open(O_CLOEXEC)` 不会丢失。
-3. **Non-leader execve**：通过 `de_thread` leader transfer 实现。调用者将其 `Thread::tid` 重命名为 TGID，重新映射全局 task table、signal child list 和 `proc.tg.threads`，使 `gettid() == getpid()` 在新映像中成立。
-4. **信号重置**：匹配 Linux 的 `flush_signal_handlers` + `do_execveat_common` 语义，自定义处理函数恢复为 `SIG_DFL`，显式 `SIG_IGN` 的信号保留。
+**关键设计**：① 并发 execve 经 per-process `exec_lock` 序列化，等待是 yield-loop + `exit_request` 探测，匹配 Linux "killable but not signal-interruptible"；② CLOEXEC fd 在 sibling teardown **之后**快照，防止迟到的 `F_SETFD`/`O_CLOEXEC` 丢失；③ 非 leader execve 经 `de_thread` leader transfer，把 `tid` 重命名为 TGID、重映射 task table；④ 信号重置匹配 `flush_signal_handlers`，自定义 handler 恢复 `SIG_DFL`、显式 `SIG_IGN` 保留。
 
-**开发历程**：该特性经历了 5 次 rebase（从 4 月 25 日到 4 月 27 日，每次保留备份分支），5 月 9-12 日完成核心实现（包括 de_thread leader transfer 和 NULL argv/envp 处理），5 月 15-19 日进行并发 bug 修复（信号处理竞态、robust-futex TID 对齐等），最终于 5 月 20 日合入主线。
+**评审迭代**：周睿老师首轮即 `CHANGES_REQUESTED`，配合 octopus-review 机器人，问题归为：scope（PR 顺带改 workspace `default-members` 影响面过大，移出）、并发（`try_lock` 返回 EINTR 而非阻塞、双重 ELF 加载、probe 未 drop）、跨 syscall / 失败路径（在可失败加载**之前**就杀 sibling、不可逆点二次加载失败应 `do_exit` 而非返回 error）、测试缺失（补 `test-mt-execve`）。对应 git 修复链：`address 4 multi-thread execve race issues` → `align robust-futex owner TID + defer CLOEXEC close` → `preserve pending signals across execve` → `accepts NULL argv/envp`；期间 5 次 rebase。
 
-**评审迭代**：Reviewer 周睿老师在第一次提交时指出了大量问题，包括 `try_lock` 并发语义不够细粒度、CLOEXEC 的快照时机错误、vfork 的睡眠要能够被 zap 打断等。这些问题可归纳为两类：并发 bug 和跨 syscall 交互。
+**遗留**：execve 后无 `do_thread`，不恒定满足 `gettid() == getpid()`（诚实标注）。
 
-**已解决**：
-- 在可失败阶段破坏线程组
-- execve 并发的阻塞语义更细粒度
-- CLOEXEC 的竞态条件
-- vfork 相关阻塞
-- `execve(path, NULL, NULL)` 对齐 Linux 标准
-- 多线程 execve 成功回归测试充分
+### 3.2 文件锁 [#472]（+3201 / -18，41 文件，05-12 合入）
 
-**遗留问题**：
-- execve 后没有 `do_thread`，因此不恒定满足 `gettid() == getpid()`
+**问题**：`sys_fcntl` 的所有 lock 命令（`F_SETLK`/`F_SETLKW`/`F_GETLK` 及 `F_OFD_*`）与 `sys_flock` 全部返回 `Ok(0)` 不实际加锁，依赖文件锁协调的软件（dpkg、sqlite、postfix、nginx）以为拿到独占锁、实际谁都能进。
 
-### 3.2 文件锁 [#472](https://github.com/rcore-os/tgoskits/pull/472)
+**实现**：新增 `lock.rs`，维护两类互不影响的锁表（均以 `(device, inode)` 为 key）：`FCNTL_LOCKS`（POSIX 锁 owner=pid；OFD 锁 owner=open file description，`Arc::as_ptr` 作指纹、`Weak` 检测 close）与 `FLOCK_LOCKS`。范围 half-open `[start, end)`，`l_len==0` 表示到文件尾。
 
-**问题**：`sys_fcntl` 的所有 advisory lock 命令（`F_SETLK` / `F_SETLKW` / `F_GETLK` 及对应的 `F_OFD_*`）以及 `sys_flock` 全部返回 `Ok(0)` 而不实际加锁。依赖文件锁做并发协调的软件（dpkg、sqlite、postfix、nginx pid file 等）行为不可预测。
+**评审迭代——最硬核的部分**：周睿老师对 Linux/POSIX 语义把关极严，连续 **6 轮 `CHANGES_REQUESTED`** 才 `APPROVED`，几乎每轮都在真实 Linux 上探测锚定预期：
 
-**实现**：新增 `lock.rs`，作为完整的 advisory lock 子系统。维护 `FCNTL_LOCKS` 和 `FLOCK_LOCKS` 两类锁表，均以 `(device, inode)` 为 key，两张表互不影响。
+| reviewer 指出的问题 | Linux/POSIX 预期 | 回归用例 |
+|--------------------|-----------------|---------|
+| 漏导入 `F_GETLK` 常量被当模式变量，匹配所有 fcntl 命令 | 非锁命令走原路径 | clippy 不可达消除 |
+| POSIX 锁不随进程退出 / close / CLOEXEC 释放 | 退出与关闭任意指向同文件的 fd 时释放 | `bug-fcntl-posix-exit/close-release` |
+| `F_SETLKW` 只返回 EAGAIN 未阻塞 | 冲突释放前阻塞等待 | `bug-fcntl-setlkw-blocks` |
+| 部分解锁不唤醒（`len != before` 漏判） | 冲突范围释放后重新检查、唤醒 | `bug-fcntl-partial-wake` |
+| flock 无 LOCK_NB 也当非阻塞 | 无 LOCK_NB 阻塞、仅 LOCK_NB 返回 EWOULDBLOCK | `bug-flock-blocks` |
+| flock 升级失败丢原锁 | 转换失败语义（含 reviewer 指出测试写反） | `bug-flock-failed-upgrade` |
+| 负 l_len 被拒 | 支持反向区间 | `bug-fcntl-len-negative` |
+| whence 只认 SEEK_SET | 支持 SEEK_CUR/SEEK_END | `bug-fcntl-whence` |
+| OFD 未校验 l_pid | 必须为 0 否则 EINVAL | `bug-fcntl-ofd-pid-einval` |
+| 不校验 fd 打开模式 | F_RDLCK 需可读、F_WRLCK 需可写否则 EBADF | `bug-fcntl-fd-mode-ebadf` |
+| 目录 fd 不能加锁 | Linux 允许目录 advisory lock | `bug-advisory-lock-dir` |
+| O_PATH fd 被当普通 fd | 应返回 EBADF | — |
 
-锁归属设计：
-- **POSIX 锁**：owner = pid
-- **OFD 锁**：owner = open file description，用 `Arc::as_ptr` 作身份指纹，持 `Weak` 用于 close 检测
-- **flock 锁**：owner 同 OFD
+最终落地 **14 个 C 回归用例 × 4 架构**，批准时确认锁顺序一致（`WaitQueue → FCNTL/FLOCK_LOCKS`，唤醒均在锁外）。
 
-范围语义：half-open `[start, end)`，`l_len == 0` 表示"到文件尾"（存为 `i64::MAX`）。同 owner 设新锁前先移除/分裂旧区间再插入。OFD 自动释放：`Weak::strong_count() == 0` 即剪枝。
+### 3.3 共性
 
-**评审迭代**：Reviewer 周睿老师指出的问题包括：(1) 与 Linux/POSIX 语义不一致，如负的 `l_len`、唤醒和返回值模式；(2) 锁的问题，如子进程退出时失败路径的回滚、一致性。总结问题：(1) 语义对齐；(2) 并发 bug；(3) 失败路径处理。
-
-**代码量**：+3201 / -18 行，涉及 41 个文件。
+两个 PR 的反馈收敛到四类缺陷——**并发/阻塞唤醒、跨 syscall 状态一致性、与 Linux/POSIX 不对齐、失败路径回滚**，正是 §2.6 三个 bug-checker 的经验来源（详见 §9 四类典型缺陷）。
 
 ---
 
-## 4. EXP3: BusyBox 应用功能支持
+## 4. EXP3: BusyBox 应用兼容性支持
 
-StarryOS 中 Linux 应用的功能支持通过 BusyBox 组件测试验证。BusyBox 工作横跨约 5 周（4 月下旬至 5 月下旬），约 48 个非合并提交，最终达到 **320 PASS / 0 FAIL** 的测试覆盖（覆盖 riscv64、aarch64、x86_64、loongarch64 四个架构）。
+以 BusyBox 作为 Linux 应用兼容性探针，最终使测试套件达到 **320 PASS / 0 FAIL（riscv64 / aarch64 / x86_64 / loongarch64 四架构）**。但真正的价值不在数字，而在**测试质量**——不靠造假让测试变绿。
 
-测试进展：
+### 4.1 弱测试 vs 真测试
+
+BusyBox 的 multi-call 二进制塞了大量 daemon、文件 round-trip、ioctl 等"硬路径"，最省事的过法是用 `-h` 触发 usage banner、用 `[ -n "$_t" ]` 弱断言糊弄——但那等于**主动把内核 bug 藏起来**（内核坏了测试也不会挂）。issue #13 里 `acpid`、`add_shell`、`crond` 早期都走了这条捷径。
+
+### 4.2 为这个任务设计的工作流
+
+一句话纲领：**"不允许先把测试改通过、再回头编故事。"** 必须先复现 issue 原始命令、看 StarryOS 真实行为、写**可证伪**的失败原因 claim，再据此决定改内核还是改测试：
 
 ```
-初始覆盖 → 282 PASS (#378) → 283 PASS (#722) → 302 PASS (#668) → 320 PASS (#993)
+复现原始失败 ──┬─ A: panic/oops ───→ 必须改内核
+              ├─ B: rc≠0 + stderr ─→ 补 syscall / procfs
+              ├─ C: 卡死/静默成功 ──→ strace 证明 daemon 可用 → 改测试
+              └─ D: 实际跑得通 ────→ 直接加进脚本
+                       │
+                  可证伪 claim ──→ 改内核 / 改测试 ──→ 全量回归 ──→ 反向自检四问 ──→ 提 PR
 ```
 
-### 4.1 开发阶段
+**提 PR 前的反向自检四问**（结果原样进 PR 正文）：① 这次"通过"是不是绕开了真正的代码路径？② BusyBox 是否偷偷 fallback 到无害分支？③ 行为是否与 Linux/POSIX 对齐（同一段 stdout、同一个 rc）？④ 新增内核代码是否有伪装 stub / 未测旁路？硬约束：**改测试只许加强、不许削弱**（不许把 daemonize/rename/扫描循环换成 `-h`，不许把断言改成永远会过的弱条件）；test-only PR 必须登记未覆盖的欠账。
 
-**Phase 1 — 基础覆盖（4 月下旬至 5 月上旬）**：TTY 修复、初始测试注入、mkdir 修复、tmpfs 硬链接修复。
+### 4.3 重点 PR（四个，恰好覆盖工作流三种结果）
 
-**Phase 2 — vfork/exec 和 procfs（5 月 7-9 日）**：PR #377 实现 vfork + 修复 CLONE_VM 下的 execve（对 BusyBox daemon 至关重要）；PR #452 实现 `/proc/stat`、`/proc/cpuinfo`、`/proc/uptime`，修复 `/proc/meminfo` 和 `sysinfo()`。
+| PR | applet | 路径 | 说明 |
+|----|--------|------|------|
+| [#722](https://github.com/rcore-os/tgoskits/pull/722) | acpid | **诚实记限制** | StarryOS 不暴露 `/proc/acpi/event`，acpid 无法进真实事件循环；用 usage-banner 验证 applet 内置，**明示限制 + 登记欠账** |
+| [#751](https://github.com/rcore-os/tgoskits/pull/751) | add-shell | **加强测试** | 弱 `--help` banner（旧 #723）升级为真实 `/etc/shells` round-trip：rc=0 + `grep -qxF` 命中新行 + `.tmp` 不残留，能反向证伪 axfs-ng `O_TRUNC`/rename 回归 |
+| [#741](https://github.com/rcore-os/tgoskits/pull/741) | crond | **加强测试** | 前台规避升级为真实 daemonize 端到端：父进程 rc=0、`ps` 找到 detached daemon、SIGTERM 干净退出（vfork #377 的受益者） |
+| [#750](https://github.com/rcore-os/tgoskits/pull/750) | crontab | **改内核** | 复现暴露真 bug：`ax-fs-ng` 把 `O_TRUNC\|O_APPEND` 当冲突拒绝，而 busybox crontab 正用此组合；改为纯放松、对齐 Linux/POSIX/Rust std，配严格 round-trip 回归 |
 
-**Phase 3 — 网络/块设备（5 月 10-12 日）**：块设备支持（arch/blkid/blkdiscard/blockdev + loop）、busybox_ipaddr/iplink、ARP 表、arping、nice 优先级 syscall 等大量 PR。
-
-**Phase 4 — 大规模扩展（5 月 16-18 日）**：PR #668 为关键提交——新增 `/proc/net/dev`、socket ioctl for ifconfig/ifenslave、ICMP loopback echo reply、21 个新 applet 测试，一次将测试数从 283 提升至 302。
-
-**Phase 5 — 特定 applet 深入（5 月 18-24 日）**：6 个并行 feature branch 分别瞄准特定 applet。
-
-**Phase 6 — 稳定化（5 月 25-28 日）**：修复 SIGSTOP（挂起而非杀死）、时间控制与快速失败、PR #993 新增 7 个高副作用 applet 的安全失败覆盖（insmod、fdflush、raidautorun、killall5、rdev、setlogcons、resize）。
-
-### 4.2 重点 applet 分析
-
-#### busybox_acpid [#722](https://github.com/rcore-os/tgoskits/pull/722)
-
-**问题**：acpid 会把自己变成后台进程并关闭输出。
-
-**解决**：通过 usage banner 验证 acpid 可被正确调用。
-
-#### busybox_add_shell [#751](https://github.com/rcore-os/tgoskits/pull/751)
-
-**问题**：`/bin/shell` 已经存在时静默退出。
-
-**解决**：实现真实的 `/etc/shells` 重写路径测试。初始版本使用 `--help` banner 探测（`busybox_add_shell` 分支），后改为真实的 `/etc/shells` 重写 round-trip 测试（`busybox_add_shell_realfs` 分支）。
-
-#### busybox_crond [#741](https://github.com/rcore-os/tgoskits/pull/741)
-
-**问题**：之前让 crond 在前台运行（`-fc` 参数），但实际上 crond 可以在后台运行。
-
-**解决**：重写测试，让 crond 真正 daemonize 并验证 cron 任务实际执行。这是 vfork (#377) 的直接受益者——daemonize 需要 fork 后父进程退出、子进程继续。
-
-#### busybox_crontab [#750](https://github.com/rcore-os/tgoskits/pull/750)
-
-**问题**：创建文件失败，但返回 0 说自己运行成功。根因是内核将 `O_TRUNC` 和 `O_APPEND` 视为冲突的标志（`ax-fs-ng` 中的 `open flags` 检查），而 POSIX/Linux 允许两者同时设置。
-
-**解决**：修复 `ax-fs-ng` 中 `O_TRUNC | O_APPEND` 的错误拒绝，并重写了更严格的测试（先添加、再 ls、最后删除）。
-
-#### busybox run-parts [#517](https://github.com/rcore-os/tgoskits/pull/517)
-
-**问题**：`run-parts` 执行脚本时，如果脚本不是 ELF 格式（如 shell 脚本），execve 失败后直接报错。
-
-**解决**：在 execve 中增加 fallback——非 ELF 文件尝试通过 `/bin/sh` 执行。
-
-### 4.3 暴露的内核缺陷
-
-BusyBox 测试暴露了多个内核层面的 bug：
+### 4.4 暴露的内核缺陷
 
 | 缺陷 | PR | 根因 |
 |------|-----|------|
 | `O_TRUNC \| O_APPEND` 被拒 | #750 | `ax-fs-ng` open flags 检查过严 |
-| 非 ELF 脚本无法执行 | #517 | execve 缺少 `/bin/sh` fallback |
+| 非 ELF 脚本无法执行 | #517 | execve 缺 `/bin/sh` fallback |
 | daemonize 失败 | #377 | vfork + CLONE_VM execve 未正确实现 |
 | SIGSTOP 杀死进程而非挂起 | #925 | 信号处理实现错误 |
-| procfs 数据缺失 | #452, #668 | 多个 `/proc` 条目未实现 |
-| 网络工具不可用 | #668 | `/proc/net/dev`、socket ioctl 缺失 |
-
-### 4.4 提 PR 前的审计流程
-
-设计了四条审计规则：
-
-1. **是否绕开了真实的路径？** — 确保测试覆盖实际执行路径
-2. **BusyBox 是否在偷偷 Fallback？** — 内核报错后上层应用是否装作没事发生
-3. **行为是否与原生 Linux/POSIX 完美对齐？** — 在标准 Alpine 环境下跑，输出和返回码是否完全一致
-4. **新增内核代码是否有伪装的 stub 实现？** — 确保不是空壳
+| procfs 数据缺失 / 网络工具不可用 | #452 / #668 | 多个 `/proc` 条目、socket ioctl 缺失 |
 
 ---
 
-## 5. EXP4: eBPF 功能支持
+## 5. EXP4: eBPF 与 LKM 内核扩展机制
 
-### 5.1 Stage 1: eBPF 运行时迁移 [#850](https://github.com/rcore-os/tgoskits/pull/850)
+把一套内核可观测性与可扩展性基础设施从独立仓 `Starry-OS/StarryOS:ebpf-kmod` 迁移并重构到 tgoskits 主线，两条线并行：**eBPF 线**让用户态程序安全挂探针采事件；**LKM/kmod 线**让 `.ko` 模块运行时加载进内核。source 与 target 分叉一年以上，故这是一次**审计驱动**的迁移而非机械 cherry-pick。
 
-将 eBPF 运行时从独立仓库 `Starry-OS/StarryOS:ebpf-kmod` 迁移至 tgoskits 主线。完整的数据流为：
+### 5.1 迁移工作流与代码审计
 
-```
-bpf() syscall → BpfMap / BpfProg → perf_event_open → kprobe / tracepoint → rbpf 执行
-```
+专门写了 `WORKFLOW_EBPF_LKM_MIGRATION.md`，按四 Phase 推进：**Phase 0 锁基线**（journal 记录 source/target/上游 SHA）→ **Phase 1 审计**（diff-audit、crate-fork-audit）→ **Phase 2 集成基座**（`feat/ebpf-integration-base` 合并上游 #673 tracepoint + #805 kallsyms/kprobe，三架构 build 通过）→ **Phase 3 分 PR-A/B/C/D 实现**。审计结论：① **已有能力不重复迁**（#244/#306/#446 已并入 dev，#673/#805 已覆盖 tracepoint/kallsyms/kprobe，故只补 perf + `kbpf-basic` 真实现 + LKM + 示例 + 用户程序）；② **禁止个人 fork**（crate-fork-audit 逐条核对 source 的 5 条 `[patch.crates-io]` Godones fork，结论全不需要，tgoskits 已 vendor 并重命名为 `ax-*`，任何迁移 PR 出现 `Godones/*` patch 直接驳回）；③ **不复制旧 Makefile/`.ld`**，统一 `cargo xtask`；④ **锁 SHA，不无声跟随 force-push**。
 
-**变更内容**：
+### 5.2 eBPF 运行时
 
-**ebpf/ 子模块**（替换 #805 的单文件 stub）：
-- `mod.rs`：`sys_bpf` 真分派，调入 `kbpf-basic` 的 map_create / prog_load 等操作。显式实现 `BpfError ↔ AxError` 边界（`kbpf-basic` 的 `axerrno` 与 tgoskits 的 `ax-errno` 是不同 crate）。
-- `map.rs`：`BpfMap` FileLike + `PollSetWrapper`。
-- `prog.rs`：`BpfProg` FileLike，drop 时释放 preprocessor 暂存的 map `Arc`。
-- `transform.rs`：实现 `KernelAuxiliaryOps`（perf_event_output / copy_from_user 等）与 `PerCpuVariantsOps`。
+数据流：`bpf(2)` → `BpfMap`/`BpfProg`（FileLike + fd）→ `perf_event_open`（`PerfEvent` 按 `PerfTypeId` 分派 kprobe/tracepoint/uprobe）→ `OwnedEbpfVm`（rbpf 解释执行）→ ringbuf / perf output（mmap）。
 
-**perf/ 子模块**（全新）：
-- `mod.rs`：`PerfEvent` FileLike，按 `PerfTypeId` 分派 kprobe / software / tracepoint / uprobe。
-- `bpf.rs`：ringbuf write_event + `OwnedEbpfVm`（rbpf 解释器 + `Arc<BpfProg>` 一体）。
-- `kprobe.rs`：Kprobe/Kretprobe，set_bpf_prog 时构建 `OwnedEbpfVm` 并注册回调。
-- `tracepoint.rs`：适配 ktracepoint 0.6 新 API。
+| PR | 内容 | 规模 |
+|----|------|------|
+| [#850](https://github.com/rcore-os/tgoskits/pull/850) | 运行时迁移：`ebpf/` 子模块（`sys_bpf` 真分派、map/prog FileLike、`KernelAuxiliaryOps`）+ 全新 `perf/` 子模块（PerfEvent、ringbuf、kprobe/tracepoint 接线） | +1949 / -2054 |
+| [#886](https://github.com/rcore-os/tgoskits/pull/886) | 内核侧运行时收敛：tracepoint/kprobe/perf 接线、uprobe 端到端、perf ringbuf mmap 副作用治理 | +792 / -97 |
+| [#1132](https://github.com/rcore-os/tgoskits/pull/1132) | 可运行 demo：`apps/starry/ebpf/` 下 uprobe/kprobe/kretprobe/tracepoint 用户态程序 + 构建链 | +6696 |
 
-**代码量**：+1949 / -2054 行。
+**关键洞察**：① 跨 crate errno 边界——`kbpf-basic` 的 `axerrno` 与 tgoskits 的 `ax-errno` 是不同 crate，必须显式 `BpfError ↔ AxError` 转换；② 两处生命周期/UB 修复——VM 持有 prog 指令原本 `unsafe` 扩 slice 为 `'static`，改为 `Arc<BpfProg>` 绑定；一处 `&self` 强转 `&mut self` 会让编译器读脏寄存器，改为 `UnsafeCell<T>`；③ `mmap(perf_fd)→ringbuf` 原本因 `PerfEvent` 未覆写 `device_map` 静默丢事件 + 空 Drop 泄漏，已补齐；④ 新增 `sched:sched_switch`/`process_fork`/`process_exit` 三个 tracepoint；⑤ 三个 demo（`syscall_count` kprobe 计数、`sched_trace` tracepoint 写 ringbuf、`profile_kprobe` 按 caller PC 计数）验证能力打通。
 
-**开发历程**：
-- 基础设施由 `feat/ebpf-integration-base` 分支整合，合并了 `pr-673-tp`（tracepoints）和 `pr-805-ebpf-observability` 两个前置 PR。
-- 核心迁移提交 `d7a9818f5`（5 月 21 日）后经历了多轮评审迭代（5 月 22 日解决编译错误、5 月 26 日清理 clippy、5 月 31 日评审驱动的重构）。
-- 5 月 31 日合入 `dev` 分支。
+### 5.3 LKM / kmod 加载机制
 
-### 5.2 LKM 支持 [#851](https://github.com/rcore-os/tgoskits/pull/851)
+目标：让用户态把 Rust 编译的 `.ko` 在运行时加载进内核、解析符号、调用内核 API，并提供与工具链一致的构建链。工程量集中在内核加载器与模块+构建链两块。
 
-实现 Loadable Kernel Module 机制，接受用户态 `.ko` 文件，解析内容并注册到 `MODULES` 表。
+**内核加载器（[#851](https://github.com/rcore-os/tgoskits/pull/851)，+828 / -241，已合入）**：三个 syscall `init_module`/`finit_module`/`delete_module`，每步都做成真实现——`resolve_symbol` 走 `kallsyms` 真实解析、`finit/delete` 真实现、用户态内存经 `VmBytes`/`vm_load_string` 正规拷贝、`printk` 等 C-ABI shim 经 `lwprintf-rs` 实现并正确转发 varargs、模块由 `MODULES` 注册表持有可卸载。真正吃功夫的是一连串底层链接与内存语义的打磨：驱动 `rust-lld` 以 GNU ELF driver 模式做 partial link 产出可加载重定位；按 ELF section 权限安置页、**释放 section 页前先恢复 RW 内核映射**；vmalloc 区按页对齐校验、加载前拒绝重名模块并 flush icache；适配 errno 边界与传播、保持 `ax-errno` fork 领先以修构建、适配 HAL imports 到 dev 的 `ax_runtime::hal` 布局。
 
-**三个 syscall**：`init_module`、`finit_module`、`delete_module`。
+**示例模块 + 构建链（`hello` / `kebpf`）**：`hello` 验证模块能加载、init/exit、解析符号；`kebpf` 通过 `starry_kernel::ebpf::transform`、`file::add_file_like` 等公开接口调用内核 API、创建 fd 对象，并作为 **`bpf(2)` 的 provider**（为此把内核 `ebpf|file|mm|perf` 从 `mod` 升为 `pub mod` 开放给 out-of-tree 模块）。配套实现了 runtime `bpf(2)` 注册（让 `kebpf.ko` 既能内置也能可加载提供 `bpf(2)`）、把 `unwrap/expect` 换成规范错误传播 + 有界 `bpf_attr` 读取；并引入 **`STARRY_KMOD` 内核构建模式**（build-std parity + loadable relocations + 传入 platform features），让模块与内核在符号解析的 hash parity 上一致；新增 `kmod-modules` 可加载模块 **QEMU smoke 测试**，并写了 `docs/kmod.md` 构建/使用指南。
 
-**构建系统**：借助 `cargo xtask` 系统实现 `cargo xtask starry kmod build` 构建链，将 Rust 模块编译为 `.ko`。
+这条线从"三个 syscall"出发，真正落地打通了 **ELF partial link、符号 hash parity、section 权限与缓存一致性、C-ABI varargs、build-std 构建对齐、运行时 provider 注册** 一整条贯穿内核、链接器、构建系统三层的链路；目前 loader 已合入主线，模块与端到端加载持续推进。
 
-**取代旧实现 #849**：
+### 5.4 两条线对比
 
-| | #849（旧） | #851（新） |
-|---|---|---|
-| `resolve_symbol` | 桩，恒返回 `None` | 走 `kallsyms` 真实解析 |
-| `finit_module` / `delete_module` | 桩，恒返回 `Unsupported` | 真实实现 |
-| 用户态内存拷贝 | 裸 `from_raw_parts` | 经 `VmBytes` / `vm_load_string` 正规拷贝 |
-| `printk` 等 C-ABI shim | 无 | 经 `lwprintf-rs` 实现 |
-| 构建 `.ko` | 无 | `cargo xtask starry kmod build` 流水线 |
-| 模块卸载 | `mem::forget`，不可卸载 | 注册表持有，`delete_module` 可卸载 |
+| 维度 | eBPF 线 | LKM / kmod 线 |
+|------|---------|---------------|
+| 入口 | `bpf(2)` / `perf_event_open` | `init/finit/delete_module` |
+| 扩展方式 | 受限字节码 + rbpf 解释执行（沙箱） | 原生 `.ko`、符号重定位后直接执行 |
+| 核心难点 | 跨 crate errno、VM 生命周期、ringbuf mmap | partial link、符号 hash parity、section 权限、build-std 对齐 |
+| 安全模型 | 沙箱 | 完全信任 |
 
-**开发历程**：5 月 21 日初始移植后，经历了大量修复——编译错误、section 权限处理、errno 传播、printk varargs 转发、ELF partial link、ax-errno crate 冲突解决等。截至 6 月 2 日仍在活跃开发中。
+两条线本质是"在内核里安全跑外部逻辑"的两种范式：eBPF 用沙箱换安全，kmod 用符号链接换能力。与 Linux eBPF 相比（StarryOS 走解释执行、attach 类型有限，但核心数据流已打通）：
 
-### 5.3 内核模块示例 [#880](https://github.com/rcore-os/tgoskits/pull/880)
-
-两个示例 LKM 模块：
-
-- **hello**：能加载模块、能 init/exit、能解析符号。
-- **kebpf**：能调用内核 API、能创建 fd 对象。通过 `starry_kernel::ebpf::transform`、`starry_kernel::file::add_file_like` 等公开接口与内核 eBPF 子系统交互。
-
-此 PR 还将 `kernel/src/lib.rs` 中的 `ebpf | file | mm | perf` 从 `mod` 升为 `pub mod`，使 out-of-tree 模块可以访问这些子系统。
-
-### 5.4 用户态 eBPF 程序 [#886](https://github.com/rcore-os/tgoskits/pull/886)
-
-将 7 个 aya eBPF 三件套（用户态 loader + 共享类型 + eBPF 字节码）从源仓迁移至 `os/StarryOS/user/ebpf/`：
-
-| 程序 | 测试目标 | 内核侧依赖 |
+| 维度 | tgoskits | Linux eBPF |
 |------|----------|-----------|
-| `kret` | kretprobe（`sys_getpid` 返回值） | `perf/kprobe.rs` |
-| `rawtp` | raw tracepoint（`sys_clone`） | `perf/raw_tracepoint.rs` |
-| `mytrace` | tracepoint（`syscalls:sys_enter_openat`） | `perf/tracepoint.rs` |
-| `syscall_ebpf` | syscall 计数（kprobe + HashMap） | `perf/kprobe.rs` + `ebpf/map.rs` |
-| `upb` / `upb2` | uprobe（用户函数 / musl libc） | `perf/uprobe.rs`（暂 `Unsupported`） |
-| `async_test` | tokio + `core::arch::breakpoint` smoke | 仅内核 break 处理 |
-
-构建入口为新增的 `cargo xtask starry user-ebpf build` 子命令。
-
-### 5.5 Stage 2: 功能拓展
-
-**Tracepoint 拓展**：新增 `sched: sched_switch`、`sched: sched_process_fork`、`sched: sched_process_exit` 三个 tracepoint。
-
-| 问题 | 关联情境 | 修复点 |
-|------|----------|--------|
-| `sched:sched_switch` 未定义 | 调度追踪 | `run_queue.rs` 中的 `switch_to` 路径 |
-| `sched:sched_process_fork` / `sched_process_exit` 未定义 | 调度追踪 | `clone.rs` 中的 exit/clone 路径 |
-
-**mmap(perf_fd) → ringbuf**：`PerfEvent` 没有覆写 `device_map`，走默认实现返回 `Err`，用户态 `mmap` 失败，`write_event` 会静默丢失（检测到 `phys_addr` 为 `None` 直接丢弃）。旧有代码的空 `Drop` 实现还会导致内存泄漏。
-
-### 5.6 Bug 修复
-
-**VM 持有 prog 指令的生命周期**：
-- 问题：`unsafe` 扩展 slice 为 `'static`，绕过编译器。
-- 解决：绑定 prog 和 vm（`Arc<BpfProg>`），确保指令的内存不会被提前回收。
-
-**`&self` → `&mut self` 的 UB**：
-- 问题：强行把 `&self` 转为 `&mut self` 获取可变引用。编译器优化时仍认为是 `&self`，可能读了寄存器里的脏数据或做了预期外的指令重排。
-- 解决：将数组元素改为 `UnsafeCell<T>`，内容声明为可变。
-
-### 5.7 Demo 实现
-
-**syscall_count**：在 syscall 入口注 kprobe；每次触发把 syscall 号当 key，计数 +1；用户态每 N 秒迭代 map 输出。
-
-**sched_trace**：在 `switch_to` 里注 `sched:sched_switch` 的 tracepoint；把信息（prev_tid, next_tid, prev_state, ts_ns）写入 ringbuf；用户态 perf buffer reader 实时打印。
-
-**profile_kprobe**：在调度入口注 kprobe；获取 PC；`map[caller_pc]++`；用户态打印 top-k caller。
-
-### 5.8 Linux vs. StarryOS eBPF 对比
-
-| 维度 | StarryOS ebpf-kmod | tgoskits PR #850 | Linux eBPF |
-|------|-------------------|-----------------|------------|
-| syscall 分发 | kebpf 模块注册 handler | 内核直接实现 | 内核直接实现 |
-| 程序加载 | 直接读取创建 | 直接读取创建 | Verifier 校验后创建 |
-| map 管理 | BpfMap + fd | BpfMap + fd | 完整 map fd 生命周期 |
-| attach | perf/kprobe/tracepoint/rawtp | perf/kprobe/tracepoint/rawtp | 大量类型 |
-| 执行 | rbpf 解释执行 | rbpf 解释执行 | JIT 或解释执行 |
-| 输出 | perf event output | perf event output + ringbuf mmap | perf buffer / ringbuf / map 等 |
+| 程序加载 | 直接读取创建 | Verifier 校验后创建 |
+| attach | perf/kprobe/kretprobe/tracepoint/raw_tp/uprobe | 大量类型 |
+| 执行 | rbpf 解释执行 | JIT 或解释执行 |
+| 输出 | perf output + ringbuf mmap | perf buffer / ringbuf / map |
 
 ---
 
 ## 6. BigLabA: 实验基础
 
-### 6.1 Task1: 5 个基础实验
-
-完成五个基础内核实验，涵盖内核开发的各个方面。
-
-### 6.2 Task2: 个性化实验教程设计
-
-设计了两个个性化实验教程：
-
-1. **调度算法实验**：理解和实现不同的 CPU 调度策略
-2. **同步互斥机制的可观测系统**：观察和理解内核中的同步原语
-
-### 6.3 Task3: 扩展实验实践
-
-完成三个扩展实验：
-
-1. **七巧板**：图形化应用在 StarryOS 上的适配
-2. **双人羽毛球**：实时交互应用
-3. **Doom 游戏**：复杂图形应用的内核支持
+- **Task1**：完成 5 个基础内核实验，涵盖内核开发各方面。
+- **Task2 个性化实验教程**：设计两个教程——「调度算法实验」（理解与实现不同 CPU 调度策略）与「同步互斥机制的可观测系统」（观察内核同步原语）。
+- **Task3 扩展实验**：完成三个——七巧板（图形应用适配）、双人羽毛球（实时交互）、Doom（复杂图形应用的内核支持）。
 
 ---
 
@@ -368,89 +247,120 @@ bpf() syscall → BpfMap / BpfProg → perf_event_open → kprobe / tracepoint �
 
 | 练习 | 层次 | 做了什么 | 核心训练点 |
 |------|------|----------|-----------|
-| `exercise-printcolor` | 应用/输出层 | 在 ArceOS 的串口输出里打印 ANSI 彩色字符串 | `no_std` app、`axstd::println!`、ANSI escape |
-| `exercise-hashmap` | 标准库适配层 | 让 `axstd::collections::HashMap` 可用 | `no_std + alloc` 下怎么补 HashMap |
-| `exercise-altalloc` | 内核内存管理层 | 实现一个 bump 风格的内核全局分配器 | `GlobalAlloc` 背后的 byte/page allocator |
-| `exercise-ramfs-rename` | 文件系统层 | 在 ramfs 根文件系统中支持 `fs::rename` | VFS 路径分发、ramfs 目录项重命名 |
-| `exercise-sysmap` | 用户态/系统调用层 | 加载用户程序，并实现 `mmap` 支持文件映射 | ELF loader、用户地址空间、syscall emulation |
+| `exercise-printcolor` | 应用/输出层 | 串口输出打印 ANSI 彩色字符串 | `no_std` app、`axstd::println!`、ANSI escape |
+| `exercise-hashmap` | 标准库适配层 | 让 `axstd::collections::HashMap` 可用 | `no_std + alloc` 下补 HashMap |
+| `exercise-altalloc` | 内核内存管理层 | 实现 bump 风格内核全局分配器 | `GlobalAlloc` 背后的 byte/page allocator |
+| `exercise-ramfs-rename` | 文件系统层 | ramfs 支持 `fs::rename` | VFS 路径分发、目录项重命名 |
+| `exercise-sysmap` | 用户态/系统调用层 | 加载用户程序并实现文件映射 `mmap` | ELF loader、用户地址空间、syscall emulation |
 
 ---
 
-## 8. PR 汇总
+## 8. StarryOS 架构分析
 
-### 已合入 PR
+八周横跨进程、文件锁、文件系统、eBPF、LKM 多个子系统，对 StarryOS 的架构在"AI 辅助开发"视角下有一些观察。
 
-| PR # | 日期 | 标题 | 类型 |
-|------|------|------|------|
-| [#273](https://github.com/rcore-os/tgoskits/pull/273) | 05-20 | feat(starry): support multi-threaded execve | Feature |
-| [#472](https://github.com/rcore-os/tgoskits/pull/472) | 05-12 | feat(starry): implement advisory file locks (fcntl POSIX/OFD, flock) | Feature |
-| [#517](https://github.com/rcore-os/tgoskits/pull/517) | 05-24 | fix(starry): retry non-ELF via /bin/sh in execve | Fix |
-| [#722](https://github.com/rcore-os/tgoskits/pull/722) | 05-19 | test(busybox): cover busybox_acpid via usage banner | Test |
-| [#741](https://github.com/rcore-os/tgoskits/pull/741) | 05-24 | test(busybox): cover busybox_crond daemon round-trip | Test |
-| [#750](https://github.com/rcore-os/tgoskits/pull/750) | 05-24 | test(starryos): add busybox crontab regression | Test |
-| [#751](https://github.com/rcore-os/tgoskits/pull/751) | 05-20 | test(busybox): exercise busybox add-shell real /etc/shells rewrite path | Test |
-| [#850](https://github.com/rcore-os/tgoskits/pull/850) | 05-31 | feat(starry-kernel): port eBPF runtime (ebpf/, perf/, kprobe wiring) | Feature |
-| [#993](https://github.com/rcore-os/tgoskits/pull/993) | 05-28 | test(busybox): add safe-failure coverage for 7 high-side-effect applets | Test |
+### 8.1 架构概览
 
-### 在途 PR
+StarryOS 把 ArceOS 的模块（HAL、调度、内存、网络、文件系统）作为底座，在其上叠 Linux 兼容层（syscall 分发、进程/信号、FileLike fd 抽象）。所有跨 crate 依赖经 tgoskits vendor 并重命名为 `ax-*`，构建/测试统一走 `cargo xtask`。
+
+### 8.2 有利于 AI 开发的架构特征
+
+- **模块化分层**：改一个子系统不易波及全局，scope 可控，天然适合 AI 做局部、可 review 的小改动。
+- **Rust 编译器护栏**：所有权/借用/类型在编译期挡住一大类内存与并发错误——EXP4 那处 `&self→&mut` 的 UB，最终正是靠把状态显式化为 `UnsafeCell<T>` 让编译器重新看见。
+- **FileLike trait 抽象**：`BpfMap`/`BpfProg`/`PerfEvent` 都实现统一 fd 接口，AI 加新 fd 类型有清晰模板。
+- **`cargo xtask` 确定性构建/测试**：一条命令复现 build/rootfs/qemu/test，是脚本层"无幻觉"能力的基础。
+
+### 8.3 产生系统性摩擦的架构特征
+
+- **单体 syscall 分发**：跨 syscall 的共享状态（如文件锁随 close/exit/exec 释放）需要在多处手动串联，AI（甚至人）极易漏——EXP2 文件锁 6 轮 review 一大半卡在这。
+- **隐式跨层副作用**：如 EXP4 perf `mmap` 的 `device_map` 默认返回 `Err` 导致静默丢事件、execve 与 fd-table 锁/robust-futex 的交错——副作用不在签名里，难以静态发现。
+- **"假成功" stub 策略**：历史上大量 syscall/ioctl 返回 `Ok(0)` 占位（fcntl lock、flock、bpf、kmod `resolve_symbol`），让上层看起来成功却没有真实语义——这是 EXP2/3/4 反复踩的同一个坑，也是 `misalignment-checker` 与 anti-fallback 护栏的根源。
+- **crate 重复 / errno 边界**：`kbpf-basic` 的 `axerrno` 与 tgoskits 的 `ax-errno` 是不同 crate，跨界要手动转换。
+
+### 8.4 改进方向
+
+1. 把单体 syscall dispatch 拆成按子系统注册的表，降低跨 syscall 状态串联的遗漏面。
+2. 为 fd 生命周期事件（close/exit/exec）提供统一 hook，让"资源随关闭释放"成为框架保证而非每个子系统手写。
+3. 主线明确**禁止"假成功 stub"**：未实现就显式 `ENOSYS`，配合 `misalignment-checker` 在 CI 拦截。
+4. 统一 errno crate，消除跨 crate 边界转换。
+
+---
+
+## 9. 四类典型缺陷
+
+横向看 EXP2/3/4 的全部 review 反馈与暴露的内核 bug，可归纳为四类反复出现的模式——它们正是 EXP1 三个 bug-checker 的设计依据：
+
+1. **边界条件导致的"假成功" / 静默失效。** 操作看起来成功（rc=0）但内核状态没变：fcntl lock / flock 返回 `Ok(0)`、bpf / kmod `resolve_symbol` 桩、perf `mmap` 失败后静默丢事件。**最危险的一类**——它能在内核完全坏掉时依然让测试变绿。
+2. **新旧实现混淆。** 同一能力存在桩与真实现两套：#851 取代 #849 的 `resolve_symbol`/`finit` 桩；#850 替换 #805 的单文件 bpf stub。迁移时若不审计清楚，容易把桩当真。
+3. **直觉式错误的边界处理。** "想当然"的边界判断与 Linux 不符：负 `l_len` 直接拒、`O_TRUNC|O_APPEND` 当冲突、whence 只认 `SEEK_SET`、`O_PATH` 当普通 fd、`F_OFD_*` 不校验 `l_pid`。
+4. **错误路径副作用。** 失败路径没有和成功路径用同一套清理纪律：execve 在可失败阶段前就杀 sibling、flock 升级失败丢原锁、二次加载失败返回 error 却留下不一致状态。
+
+四类缺陷对应 `concurrent-bug-checker`（1、4 的并发面）、`cross-syscall-bug-checker`（1、4 的跨 syscall 面）、`misalignment-checker`（2、3）。
+
+---
+
+## 10. PR 汇总
 
 | PR # | 标题 | 类型 | 状态 |
 |------|------|------|------|
-| [#851](https://github.com/rcore-os/tgoskits/pull/851) | feat(starry-kernel): port LKM loader + cargo xtask starry kmod build | Feature | Open |
-| [#880](https://github.com/rcore-os/tgoskits/pull/880) | feat(starry-modules): port hello + kebpf loadable kernel modules | Feature | Open |
-| [#886](https://github.com/rcore-os/tgoskits/pull/886) | feat(starry-user): port aya eBPF userspace programs + cargo xtask user-ebpf | Feature | Open |
+| [#273](https://github.com/rcore-os/tgoskits/pull/273) | support multi-threaded execve | Feature | 已合入 |
+| [#472](https://github.com/rcore-os/tgoskits/pull/472) | advisory file locks (fcntl POSIX/OFD, flock) | Feature | 已合入 |
+| [#517](https://github.com/rcore-os/tgoskits/pull/517) | retry non-ELF via /bin/sh in execve | Fix | 已合入 |
+| [#722](https://github.com/rcore-os/tgoskits/pull/722) | busybox_acpid via usage banner | Test | 已合入 |
+| [#741](https://github.com/rcore-os/tgoskits/pull/741) | busybox_crond daemon round-trip | Test | 已合入 |
+| [#750](https://github.com/rcore-os/tgoskits/pull/750) | ax-fs-ng O_TRUNC\|O_APPEND + crontab regression | Fix | 已合入 |
+| [#751](https://github.com/rcore-os/tgoskits/pull/751) | busybox add-shell real /etc/shells rewrite | Test | 已合入 |
+| [#993](https://github.com/rcore-os/tgoskits/pull/993) | safe-failure coverage for 7 applets | Test | 已合入 |
+| [#850](https://github.com/rcore-os/tgoskits/pull/850) | port eBPF runtime (ebpf/, perf/, kprobe) | Feature | 已合入 |
+| [#851](https://github.com/rcore-os/tgoskits/pull/851) | LKM loader + cargo xtask starry kmod build | Feature | 已合入 |
+| [#886](https://github.com/rcore-os/tgoskits/pull/886) | eBPF kernel runtime (tracepoint / kprobe / perf) | Feature | 已合入 |
+| [#1132](https://github.com/rcore-os/tgoskits/pull/1132) | runnable eBPF demos under apps/starry/ebpf | Feature | 推进中 |
+
+（EXP3 另有 #377 / #452 / #665 / #668 等多个已合入的 BusyBox 相关 PR。）
 
 ---
 
-## 9. 感悟与建议
-
-### 9.1 感悟
-
-**1. 成熟内核上的工作与重新设计截然不同。** 在一个已经成熟的内核上工作，需要考虑已有的架构和 API，需要对齐标准预期、核对边界条件，并确保改动的 scope 不会太大、易于 review 和验证。这种"在约束中演进"的开发模式对工程能力的要求不亚于从零构建。
-
-**2. AI 工程是一个复杂的问题。** 同样的任务，一个裸的 SOTA 闭源模型写出的代码全是 bug，需要返工十余次；但引入总结经验、借鉴先进实践的 harness 后，弱很多的开源模型就能做得很好。关键不在于模型本身的能力，而在于围绕模型构建的工程护栏。
-
-### 9.2 建议
-
-**1. 考虑引入 Linux 近些年的新子系统/特性或复现论文。** 从设计、权衡到开发、验证，避免只是跑通应用、支持新硬件的纯工程实践。这样可以让同学们有更多思考、学到更多东西，而不是纯粹指挥 AI。
-
-**2. 学习软工课的模式。** 每个助教带 1-3 个 3-5 人小组做 biglab，更多的人可以做一个更大的项目/问题，既能提高深度，也能锻炼团队协作。
-
----
-
-## 10. 最终产出
+## 11. 最终产出
 
 ```
-BigLabA (实验基础):
-  ├── 5 个基础实验
-  ├── 个性化实验教程 (调度算法 / 同步互斥可观测系统)
-  └── 3 个扩展实验 (七巧板 / 双人羽毛球 / Doom)
-
-BigLabB (实验框架):
-  ├── tg-arceos-tutorial (5 层递进练习)
-  └── 从应用到系统调用的完整覆盖
+BigLabA: 5 基础实验 + 2 个性化教程(调度/同步可观测) + 3 扩展实验(七巧板/羽毛球/Doom)
+BigLabB: tg-arceos-tutorial 5 层递进练习 (应用→系统调用全覆盖)
 
 EXP1 (AI 开发框架):
   ├── 四角色流水线 (Designer / Developer / Reviewer / Auditor)
-  ├── 9 技能 + 3 代理 + 16 脚本
-  └── 三道工程护栏 (结构化输出 / 状态记忆 / 审查者否决权)
+  ├── 20 技能 + 16 脚本 + 3 工作区文档
+  ├── 三道工程护栏 (结构化输出 / 状态记忆 / 审查者否决权)
+  └── 对照实验: 弱模型(DeepSeek)+强护栏 收敛了强模型(Opus)裸跑的同类 bug
 
 EXP2 (内核功能支持):
-  ├── 多线程 execve (#273): +1732 行, 21 文件
-  └── 文件锁 (#472): +3201 行, 41 文件
+  ├── 多线程 execve (#273): +1732 / 21 文件, 两阶段提交
+  └── 文件锁 (#472): +3201 / 41 文件, 6 轮 review, 14 用例 × 4 架构
 
-EXP3 (应用支持):
-  ├── ~48 个非合并提交, 跨 5 周
-  ├── 6 个并行 feature branch
-  ├── 内核修复: vfork/execve, 信号处理, procfs, 网络, ax-fs-ng
-  ├── 9 个已合入 PR (#377, #452, #517, #665, #668, #722, #741, #750, #751, #993)
-  └── 320 PASS / 0 FAIL (4 个架构)
+EXP3 (应用兼容):
+  ├── 320 PASS / 0 FAIL (4 架构), 反向自检工作流
+  └── 暴露并修复多个内核缺陷 (ax-fs-ng / vfork / 信号 / procfs / 网络)
 
 EXP4 (eBPF/LKM):
-  ├── eBPF 运行时 (#850): +1949 行
-  ├── LKM 加载器 (#851): +828 行, 在途
-  ├── 内核模块示例 (#880): 在途
-  └── 用户态 eBPF 程序 (#886): +11609 行, 在途
+  ├── eBPF 运行时 (#850 +1949 / #886 +792) + 可运行 demo (#1132 +6696)
+  └── LKM 加载器 (#851 +828) + hello/kebpf 模块 (partial link / 符号 parity / kmod 构建链)
 ```
 
-感谢聆听，敬请指正。
+---
+
+## 12. 感悟与建议
+
+### 12.1 感悟
+
+**1. 成熟内核上的工作与重新设计截然不同。** 在一个已经成熟的内核上工作，需要考虑已有的架构和 API，对齐标准预期、核对边界条件，并确保改动 scope 不会太大、易于 review 和验证。这种"在约束中演进"的开发模式，对工程能力的要求不亚于从零构建——本报告里反复出现的并发竞态、跨 syscall 状态、逐位语义对齐，都是这种约束的体现。
+
+**2. AI 工程是一个复杂的问题。** 同样的任务，一个裸的 SOTA 闭源模型写出的代码全是 bug、需要返工十余次；但引入总结经验、借鉴先进实践的 harness 后，弱很多的开源模型就能做得很好（EXP1 §2.6 的对照实验）。**关键不在于模型本身的能力，而在于围绕模型构建的工程护栏**——把领域反馈固化成可机械执行的对抗性流程，比换一个更大的模型更有价值。
+
+### 12.2 建议
+
+**1. 考虑引入 Linux 近些年的新子系统 / 特性，或复现论文。** 从设计、权衡到开发、验证，避免只是"跑通应用、支持新硬件"的纯工程实践。这样能让同学们有更多思考、学到更多东西，而不是纯粹指挥 AI。
+
+**2. 学习软工课的模式。** 每个助教带 1-3 个 3-5 人小组做 biglab，更多的人合作做一个更大的项目/问题，既能提高深度，也能锻炼团队协作。
+
+---
+
+*感谢聆听，敬请指正。各实验的完整细节与 review 线索另见 `report/exp1~4/report.md` 及对应 GitHub PR。*
