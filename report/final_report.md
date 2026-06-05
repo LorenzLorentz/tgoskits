@@ -314,7 +314,7 @@ StarryOS 把 ArceOS 的模块（HAL、调度、内存、网络、文件系统）
 | [#850](https://github.com/rcore-os/tgoskits/pull/850) | port eBPF runtime (ebpf/, perf/, kprobe) | Feature | 已合入 |
 | [#851](https://github.com/rcore-os/tgoskits/pull/851) | LKM loader + cargo xtask starry kmod build | Feature | 已合入 |
 | [#886](https://github.com/rcore-os/tgoskits/pull/886) | eBPF kernel runtime (tracepoint / kprobe / perf) | Feature | 已合入 |
-| [#1132](https://github.com/rcore-os/tgoskits/pull/1132) | runnable eBPF demos under apps/starry/ebpf | Feature | 推进中 |
+| [#1132](https://github.com/rcore-os/tgoskits/pull/1132) | runnable eBPF demos under apps/starry/ebpf | Feature | 已合入 |
 
 （EXP3 另有 #377 / #452 / #665 / #668 等多个已合入的 BusyBox 相关 PR。）
 
